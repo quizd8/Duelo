@@ -12,7 +12,7 @@ import random
 from typing import Dict, Any, Optional
 
 # Base URL from frontend/.env
-BASE_URL = "https://duelo-quiz.preview.emergentagent.com/api"
+BASE_URL = "https://rapid-quiz-42.preview.emergentagent.com/api"
 
 class DueloAPITester:
     def __init__(self):
