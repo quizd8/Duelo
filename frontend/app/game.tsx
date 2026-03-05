@@ -11,6 +11,8 @@ const { width, height } = Dimensions.get('window');
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const TIMER_DURATION = 10;
 const TOTAL_QUESTIONS = 7;
+const MAX_PTS_PER_Q = 20;
+const MAX_TOTAL = MAX_PTS_PER_Q * TOTAL_QUESTIONS; // 140
 
 type Question = {
   id: string;
@@ -35,16 +37,23 @@ export default function GameScreen() {
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
   const [loading, setLoading] = useState(true);
   const [pseudo, setPseudo] = useState('Joueur');
-  const [lastCorrect, setLastCorrect] = useState<boolean | null>(null);
-  const [lastBotCorrect, setLastBotCorrect] = useState<boolean | null>(null);
+
+  // Score bar state: tracks cumulated scores for bar rendering
+  const [playerBarScore, setPlayerBarScore] = useState(0);
+  const [botBarScore, setBotBarScore] = useState(0);
+  const [playerPending, setPlayerPending] = useState(MAX_PTS_PER_Q); // gray preview
+  const [botPending, setBotPending] = useState(MAX_PTS_PER_Q);
+  const [questionAnswered, setQuestionAnswered] = useState(false);
+
+  // Animated values for smooth bar transitions
+  const playerBarAnim = useRef(new Animated.Value(0)).current;
+  const botBarAnim = useRef(new Animated.Value(0)).current;
+  const playerPendingAnim = useRef(new Animated.Value(MAX_PTS_PER_Q / MAX_TOTAL)).current;
+  const botPendingAnim = useRef(new Animated.Value(MAX_PTS_PER_Q / MAX_TOTAL)).current;
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressAnim = useRef(new Animated.Value(1)).current;
   const questionFade = useRef(new Animated.Value(0)).current;
-
-  // Left/right bar heights animated
-  const leftBarAnim = useRef(new Animated.Value(0)).current;
-  const rightBarAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadPseudo();
@@ -94,40 +103,63 @@ export default function GameScreen() {
     }, 1000);
   };
 
-  const handleTimeout = () => {
-    setShowResult(true);
-    setLastCorrect(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-
-    // Bot might answer
-    const question = questions[currentIndex];
-    const botCorrect = Math.random() > 0.4;
+  const resolveBotAnswer = (question: Question) => {
+    const botCorrect = Math.random() > 0.35;
+    let botPick: number;
+    let botPts = 0;
     if (botCorrect) {
-      setBotAnswer(question.correct_option);
-      const botPts = Math.floor(Math.random() * 11) + 10;
-      setOpponentScore(prev => prev + botPts);
-      setLastBotCorrect(true);
+      botPick = question.correct_option;
+      const botTime = Math.floor(Math.random() * 7) + 2;
+      botPts = Math.max(MAX_PTS_PER_Q - botTime, 10);
     } else {
-      const wrongOptions = [0,1,2,3].filter(i => i !== question.correct_option);
-      setBotAnswer(wrongOptions[Math.floor(Math.random() * wrongOptions.length)]);
-      setLastBotCorrect(false);
+      const wrongOpts = [0, 1, 2, 3].filter(i => i !== question.correct_option);
+      botPick = wrongOpts[Math.floor(Math.random() * wrongOpts.length)];
     }
-
-    // Animate bars
-    animateBars(false, botCorrect);
-    setTimeout(nextQuestion, 2000);
+    return { botPick, botPts, botCorrect };
   };
 
-  const animateBars = (playerCorrect: boolean, botCorrect: boolean) => {
-    // Left bar = player, Right bar = bot
-    Animated.timing(leftBarAnim, {
-      toValue: playerCorrect ? 1 : -1,
-      duration: 300, useNativeDriver: false,
+  const updateBars = (pPoints: number, bPoints: number, newPScore: number, newBScore: number) => {
+    setQuestionAnswered(true);
+
+    // Animate player bar
+    Animated.timing(playerBarAnim, {
+      toValue: newPScore / MAX_TOTAL,
+      duration: 400, useNativeDriver: false,
     }).start();
-    Animated.timing(rightBarAnim, {
-      toValue: botCorrect ? 1 : -1,
-      duration: 300, useNativeDriver: false,
+
+    // Fade out player pending (gray portion goes to 0)
+    Animated.timing(playerPendingAnim, {
+      toValue: 0, duration: 300, useNativeDriver: false,
     }).start();
+
+    // Animate bot bar
+    Animated.timing(botBarAnim, {
+      toValue: newBScore / MAX_TOTAL,
+      duration: 400, useNativeDriver: false,
+    }).start();
+
+    // Fade out bot pending
+    Animated.timing(botPendingAnim, {
+      toValue: 0, duration: 300, useNativeDriver: false,
+    }).start();
+  };
+
+  const handleTimeout = () => {
+    setShowResult(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+    const question = questions[currentIndex];
+    const { botPick, botPts } = resolveBotAnswer(question);
+    setBotAnswer(botPick);
+
+    const newBScore = opponentScore + botPts;
+    setOpponentScore(newBScore);
+    setBotBarScore(newBScore);
+
+    // Player gets 0 (timeout)
+    updateBars(0, botPts, playerScore, newBScore);
+
+    setTimeout(nextQuestion, 2000);
   };
 
   const selectAnswer = useCallback((optionIndex: number) => {
@@ -140,33 +172,28 @@ export default function GameScreen() {
     const question = questions[currentIndex];
     const isCorrect = optionIndex === question.correct_option;
     const timeTaken = TIMER_DURATION - timeLeft;
-    const points = isCorrect ? Math.max(20 - timeTaken, 10) : 0;
-
-    setLastCorrect(isCorrect);
+    const pPoints = isCorrect ? Math.max(MAX_PTS_PER_Q - timeTaken, 10) : 0;
 
     if (isCorrect) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setPlayerScore(prev => prev + points);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
 
-    // Bot answer
-    const botCorrect = Math.random() > 0.35;
-    if (botCorrect) {
-      setBotAnswer(question.correct_option);
-      const botTime = Math.floor(Math.random() * 7) + 2;
-      setOpponentScore(prev => prev + Math.max(20 - botTime, 10));
-      setLastBotCorrect(true);
-    } else {
-      const wrongOptions = [0,1,2,3].filter(i => i !== question.correct_option);
-      setBotAnswer(wrongOptions[Math.floor(Math.random() * wrongOptions.length)]);
-      setLastBotCorrect(false);
-    }
+    const newPScore = playerScore + pPoints;
+    setPlayerScore(newPScore);
+    setPlayerBarScore(newPScore);
 
-    animateBars(isCorrect, botCorrect);
+    const { botPick, botPts } = resolveBotAnswer(question);
+    setBotAnswer(botPick);
+    const newBScore = opponentScore + botPts;
+    setOpponentScore(newBScore);
+    setBotBarScore(newBScore);
+
+    updateBars(pPoints, botPts, newPScore, newBScore);
+
     setTimeout(nextQuestion, 2000);
-  }, [selectedOption, showResult, currentIndex, questions, timeLeft]);
+  }, [selectedOption, showResult, currentIndex, questions, timeLeft, playerScore, opponentScore]);
 
   const nextQuestion = () => {
     if (currentIndex + 1 >= questions.length) {
@@ -177,10 +204,14 @@ export default function GameScreen() {
     setSelectedOption(null);
     setBotAnswer(null);
     setShowResult(false);
-    setLastCorrect(null);
-    setLastBotCorrect(null);
-    leftBarAnim.setValue(0);
-    rightBarAnim.setValue(0);
+    setQuestionAnswered(false);
+
+    // Reset pending previews for next question
+    setPlayerPending(MAX_PTS_PER_Q);
+    setBotPending(MAX_PTS_PER_Q);
+    playerPendingAnim.setValue(MAX_PTS_PER_Q / MAX_TOTAL);
+    botPendingAnim.setValue(MAX_PTS_PER_Q / MAX_TOTAL);
+
     animateQuestion();
     startTimer();
   };
@@ -204,14 +235,14 @@ export default function GameScreen() {
   }
 
   const question = questions[currentIndex];
-  const progress = (currentIndex) / questions.length;
+  const progress = currentIndex / questions.length;
 
   const getOptionStyle = (index: number) => {
     if (!showResult) return {};
     const isCorrect = index === question.correct_option;
     const isPlayerPick = index === selectedOption;
-    if (isCorrect) return { borderColor: '#00C853', borderWidth: 2 };
-    if (isPlayerPick && !isCorrect) return { borderColor: '#FF3B30', borderWidth: 2 };
+    if (isCorrect) return { borderColor: '#00C853', borderWidth: 2.5 };
+    if (isPlayerPick && !isCorrect) return { borderColor: '#FF3B30', borderWidth: 2.5 };
     return {};
   };
 
@@ -219,8 +250,36 @@ export default function GameScreen() {
     if (!showResult) return '#1A1A1A';
     if (index === question.correct_option) return '#00C853';
     if (index === selectedOption) return '#FF3B30';
-    return '#888';
+    return '#999';
   };
+
+  // Score bar component
+  const ScoreBar = ({ barAnim, pendingAnim, isLeft }: { barAnim: Animated.Value; pendingAnim: Animated.Value; isLeft: boolean }) => (
+    <View style={styles.sideBarContainer}>
+      <View style={styles.sideBarTrack}>
+        {/* Solid earned portion (grows from bottom) */}
+        <Animated.View style={[styles.sideBarEarned, {
+          height: barAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['0%', '100%'],
+          }),
+          backgroundColor: isLeft ? '#00C853' : '#00C853',
+        }]} />
+
+        {/* Gray pending portion (potential points, sits on top of earned) */}
+        <Animated.View style={[styles.sideBarPending, {
+          height: pendingAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['0%', '100%'],
+          }),
+          bottom: barAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['0%', '100%'],
+          }),
+        }]} />
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -260,10 +319,10 @@ export default function GameScreen() {
           {/* Opponent (Right) */}
           <View style={styles.opponentInfo}>
             <View style={styles.playerMeta}>
-              <Text style={styles.playerName} numberOfLines={1}>
+              <Text style={[styles.playerName, { textAlign: 'right' }]} numberOfLines={1}>
                 {params.opponentPseudo?.slice(0, 10)}
               </Text>
-              <Text style={styles.playerTitle}>Bot</Text>
+              <Text style={[styles.playerTitle, { textAlign: 'right' }]}>Bot</Text>
               <Text style={styles.opponentScoreText}>{opponentScore}</Text>
             </View>
             <View style={[styles.avatarCircle, styles.avatarOpponent]}>
@@ -280,20 +339,7 @@ export default function GameScreen() {
         {/* ── Main Game Area with Side Bars ── */}
         <View style={styles.gameArea}>
           {/* Left Score Bar (Player) */}
-          <View style={styles.sideBarContainer}>
-            <View style={styles.sideBarTrack}>
-              <Animated.View style={[styles.sideBarFill, {
-                backgroundColor: leftBarAnim.interpolate({
-                  inputRange: [-1, 0, 1],
-                  outputRange: ['#FF3B30', '#333', '#00C853'],
-                }),
-                height: leftBarAnim.interpolate({
-                  inputRange: [-1, 0, 1],
-                  outputRange: ['60%', '10%', '60%'],
-                }),
-              }]} />
-            </View>
-          </View>
+          <ScoreBar barAnim={playerBarAnim} pendingAnim={playerPendingAnim} isLeft={true} />
 
           {/* Center Content */}
           <View style={styles.centerContent}>
@@ -310,7 +356,6 @@ export default function GameScreen() {
 
                 return (
                   <View key={index} style={styles.optionRow}>
-                    {/* Answer Card */}
                     <TouchableOpacity
                       testID={`option-${index}`}
                       style={[styles.optionCard, getOptionStyle(index)]}
@@ -322,16 +367,16 @@ export default function GameScreen() {
                         {option}
                       </Text>
 
-                      {/* Left triangle (player pick) - bites into left edge, points right */}
+                      {/* Left triangle (player pick) - centered vertically, bites left edge */}
                       {showResult && isPlayerPick && (
-                        <View style={styles.triangleLeftWrap}>
+                        <View style={styles.triangleLeftAnchor}>
                           <View style={styles.triangleLeft} />
                         </View>
                       )}
 
-                      {/* Right triangle (bot pick) - bites into right edge, points left */}
+                      {/* Right triangle (bot pick) - centered vertically, bites right edge */}
                       {showResult && isBotPick && (
-                        <View style={styles.triangleRightWrap}>
+                        <View style={styles.triangleRightAnchor}>
                           <View style={styles.triangleRight} />
                         </View>
                       )}
@@ -343,20 +388,7 @@ export default function GameScreen() {
           </View>
 
           {/* Right Score Bar (Opponent) */}
-          <View style={styles.sideBarContainer}>
-            <View style={styles.sideBarTrack}>
-              <Animated.View style={[styles.sideBarFill, {
-                backgroundColor: rightBarAnim.interpolate({
-                  inputRange: [-1, 0, 1],
-                  outputRange: ['#FF3B30', '#333', '#00C853'],
-                }),
-                height: rightBarAnim.interpolate({
-                  inputRange: [-1, 0, 1],
-                  outputRange: ['60%', '10%', '60%'],
-                }),
-              }]} />
-            </View>
-          </View>
+          <ScoreBar barAnim={botBarAnim} pendingAnim={botPendingAnim} isLeft={false} />
         </View>
       </SafeAreaView>
     </View>
@@ -370,16 +402,12 @@ const styles = StyleSheet.create({
   loadingText: { color: '#FFF', fontSize: 16 },
 
   // ── Progress Bar ──
-  progressBarBg: {
-    height: 5, backgroundColor: '#333', width: '100%',
-  },
+  progressBarBg: { height: 5, backgroundColor: '#333', width: '100%' },
   progressBarFill: {
     position: 'absolute', height: 5, backgroundColor: '#8A2BE2',
     borderTopRightRadius: 3, borderBottomRightRadius: 3,
   },
-  progressBarDone: {
-    position: 'absolute', height: 5, backgroundColor: '#6B21A8',
-  },
+  progressBarDone: { position: 'absolute', height: 5, backgroundColor: '#6B21A8' },
 
   // ── Header ──
   headerRow: {
@@ -424,18 +452,23 @@ const styles = StyleSheet.create({
   // ── Game Area ──
   gameArea: { flex: 1, flexDirection: 'row' },
 
-  // ── Side Bars ──
+  // ── Score Bars ──
   sideBarContainer: {
-    width: 14, justifyContent: 'flex-end', alignItems: 'center',
-    paddingBottom: 20, paddingTop: 20,
+    width: 18, paddingVertical: 16, alignItems: 'center',
   },
   sideBarTrack: {
-    width: 10, flex: 1, backgroundColor: '#222',
-    borderRadius: 5, overflow: 'hidden',
-    justifyContent: 'flex-end',
+    width: 14, flex: 1, backgroundColor: '#222',
+    borderRadius: 7, overflow: 'hidden',
+    position: 'relative',
   },
-  sideBarFill: {
-    width: '100%', borderRadius: 5,
+  sideBarEarned: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    borderRadius: 7,
+  },
+  sideBarPending: {
+    position: 'absolute', left: 0, right: 0,
+    backgroundColor: 'rgba(0,200,83,0.35)',
+    borderRadius: 7,
   },
 
   // ── Center Content ──
@@ -453,10 +486,8 @@ const styles = StyleSheet.create({
   },
 
   // ── Options ──
-  optionsBox: { flex: 1, justifyContent: 'center', gap: 10, paddingBottom: 16 },
-  optionRow: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4,
-  },
+  optionsBox: { flex: 1, justifyContent: 'center', gap: 10, paddingBottom: 16, paddingHorizontal: 8 },
+  optionRow: { flexDirection: 'row', alignItems: 'center' },
   optionCard: {
     flex: 1, backgroundColor: '#FFFFFF', borderRadius: 8,
     paddingVertical: 16, paddingHorizontal: 14,
@@ -469,29 +500,29 @@ const styles = StyleSheet.create({
     }),
   },
   optionText: {
-    fontSize: 17, fontWeight: '800', textAlign: 'center',
-    color: '#1A1A1A',
+    fontSize: 17, fontWeight: '800', textAlign: 'center', color: '#1A1A1A',
   },
-  // Triangle LEFT: sits on left edge of card, points RIGHT (toward center)
-  triangleLeftWrap: {
-    position: 'absolute', left: -14, top: '50%',
-    marginTop: -14,
+
+  // ── Triangles ──
+  // Anchored to card edges, using top:0 bottom:0 + justifyContent:center for perfect vertical centering
+  triangleLeftAnchor: {
+    position: 'absolute', left: -15, top: 0, bottom: 0,
+    justifyContent: 'center',
   },
   triangleLeft: {
     width: 0, height: 0,
-    borderTopWidth: 14, borderTopColor: 'transparent',
-    borderBottomWidth: 14, borderBottomColor: 'transparent',
-    borderLeftWidth: 16, borderLeftColor: '#111111',
+    borderTopWidth: 13, borderTopColor: 'transparent',
+    borderBottomWidth: 13, borderBottomColor: 'transparent',
+    borderLeftWidth: 15, borderLeftColor: '#111',
   },
-  // Triangle RIGHT: sits on right edge of card, points LEFT (toward center)
-  triangleRightWrap: {
-    position: 'absolute', right: -14, top: '50%',
-    marginTop: -14,
+  triangleRightAnchor: {
+    position: 'absolute', right: -15, top: 0, bottom: 0,
+    justifyContent: 'center',
   },
   triangleRight: {
     width: 0, height: 0,
-    borderTopWidth: 14, borderTopColor: 'transparent',
-    borderBottomWidth: 14, borderBottomColor: 'transparent',
-    borderRightWidth: 16, borderRightColor: '#111111',
+    borderTopWidth: 13, borderTopColor: 'transparent',
+    borderBottomWidth: 13, borderBottomColor: 'transparent',
+    borderRightWidth: 15, borderRightColor: '#111',
   },
 });
