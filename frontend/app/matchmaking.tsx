@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   // ── Versus Screen ──
   versusContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   versusCategory: { fontSize: 16, fontWeight: '700', color: '#A3A3A3', marginBottom: 48 },
-  versusPlayers: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' },
+  versusPlayers: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', width: '100%' },
   versusPlayer: { alignItems: 'center', flex: 1 },
   versusAvatar: {
     width: 72, height: 72, borderRadius: 24, backgroundColor: '#8A2BE2',
@@ -323,6 +323,7 @@ const styles = StyleSheet.create({
   vsBadge: {
     width: 56, height: 56, borderRadius: 28, backgroundColor: '#8A2BE2',
     justifyContent: 'center', alignItems: 'center', marginHorizontal: 12,
+    marginTop: 8,
     shadowColor: '#8A2BE2', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 20,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)',
   },
