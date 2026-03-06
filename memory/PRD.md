@@ -41,85 +41,51 @@ Application de quiz multijoueur compétitive avec esthétique "Dark Mode Premium
 - Follow/Unfollow catégorie
 - Noms d'auteurs cliquables vers profil joueur
 
-### 6. Profil Joueur Public (Testé et validé - 2026-03-06)
-- Avatar avec anneau violet, pseudo, titre, pays + drapeau
-- Badges catégorie avec niveaux
-- Titres de champion (#1 par catégorie)
-- Boutons Jouer / Suivre / Message
-- Stats: Parties jouées, Abonnés, Abonnements
-- Mur de publications cross-catégories (lecture seule)
+### 6. Profil Personnel (Redesign QuizUp - Testé 2026-03-06)
+- **Hero Card**: Avatar circulaire avec anneau violet, pseudo, titre badge éditable, pays + drapeau
+- **Stats Row**: PARTIES / ABONNÉS / ABONNEMENTS (gros chiffres, séparateurs verticaux)
+- **MES THÈMES**: Grille de cartes colorées (📺 Séries TV violet, 🌍 Géographie cyan, 🏛️ Histoire or) avec icône, nom, niveau, barre XP
+- **STATISTIQUES**: Victoires, Win Rate, Best Streak, XP Total
+- **MES TITRES**: Chips sélectionnables par catégorie
+- **HISTORIQUE**: Cartes de matchs avec résultat et XP
+- **Déconnexion**: Bouton logout
 
-### 7. Système de Follow entre joueurs (Testé et validé - 2026-03-06)
+### 7. Profil Public Joueur (Redesign QuizUp - Testé 2026-03-06)
+- Même style Hero Card que le profil personnel
+- Titres de champion (#1 par catégorie) avec bannière dorée
+- **Boutons d'action**: ⚡ Jouer / + Suivre / 💬 Message (cachés pour son propre profil)
+- **SES THÈMES**: Grille catégories avec niveaux
+- **PUBLICATIONS**: Mur de posts cross-catégories (lecture seule)
+- Follow/Unfollow avec mise à jour optimiste
+
+### 8. Système de Follow entre joueurs (Testé 2026-03-06)
 - Follow/Unfollow toggle entre joueurs
 - Protection self-follow
-- Compteurs followers/following
+- Compteurs followers/following intégrés dans les profils
 
-### 8. Chat Éphémère (Testé et validé - 2026-03-06)
+### 9. Chat Éphémère (Testé 2026-03-06)
 - Messagerie 1-à-1 entre joueurs
-- Messages auto-supprimés après 7 jours (nettoyage lors du fetch conversations)
-- Bulles de messages (envoyé = violet, reçu = gris)
-- Indicateur de messages non lus
-- Polling toutes les 5 secondes
-- Format heure intelligent (il y a X min/h/j)
-- Limite 500 caractères par message
+- Messages auto-supprimés après 7 jours
+- Bulles colorées, indicateur non-lus, polling 5s
 
-### 9. Onglet Joueurs (Testé et validé - 2026-03-06)
+### 10. Onglet Joueurs (Testé 2026-03-06)
 - Recherche de joueurs par pseudo
-- Filtres par catégorie d'intérêt
-- Liste avec avatar, pseudo, titre, XP, niveau
-- Onglet Messages avec conversations et non-lus
+- Filtres par catégorie
+- Onglet Messages avec conversations
 
-### 10. Admin Dashboard
+### 11. Admin Dashboard
 - Import bulk de questions avec détection doublons
 
 ## Architecture Base de Données
-- **users**: id, pseudo, email, country, xp_series_tv, xp_geographie, xp_histoire, selected_title, mmr, stats...
+- **users**: id, pseudo, email, country, xp_series_tv, xp_geographie, xp_histoire, selected_title, mmr, stats
 - **questions**: id, category, question_text, options, correct_option, difficulty
-- **matches**: id, player1_id, player2_pseudo, category, scores, xp_earned...
+- **matches**: id, player1_id, player2_pseudo, category, scores, xp_earned
 - **category_follows**: id, user_id, category_id
 - **wall_posts**: id, user_id, category_id, content, image_base64
 - **post_likes**: id, user_id, post_id
 - **post_comments**: id, user_id, post_id, content
-- **player_follows**: id, follower_id, followed_id (UNIQUE constraint)
+- **player_follows**: id, follower_id, followed_id (UNIQUE)
 - **chat_messages**: id, sender_id, receiver_id, content, read, created_at
-
-## API Endpoints
-
-### Auth
-- POST /api/auth/register-guest (+ IP geolocation)
-- POST /api/auth/check-pseudo
-- GET /api/auth/user/{id}
-
-### Game
-- GET /api/categories
-- GET /api/game/questions?category=X
-- POST /api/game/matchmaking
-- POST /api/game/submit
-
-### Profile & Progression
-- GET /api/profile/{user_id}
-- POST /api/user/select-title
-
-### Social Wall
-- GET /api/category/{id}/detail?user_id=X
-- POST /api/category/{id}/follow
-- GET /api/category/{id}/leaderboard
-- GET /api/category/{id}/wall?user_id=X
-- POST /api/category/{id}/wall
-- POST /api/wall/{post_id}/like
-- POST /api/wall/{post_id}/comment
-- GET /api/wall/{post_id}/comments
-
-### Player Profile & Social
-- GET /api/player/{user_id}/profile?viewer_id=X
-- POST /api/player/{user_id}/follow
-- GET /api/players/search?q=X&category=Y&country=Z&limit=N
-
-### Chat
-- POST /api/chat/send
-- GET /api/chat/conversations/{user_id}
-- GET /api/chat/{user_id}/messages?with_user=X
-- GET /api/chat/unread-count/{user_id}
 
 ## Architecture Frontend
 ```
@@ -128,9 +94,9 @@ frontend/app/
 │   ├── _layout.tsx      # Tab navigator (Jouer / Joueurs / Profil)
 │   ├── home.tsx         # Écran principal, liste catégories
 │   ├── players.tsx      # Recherche joueurs + Messages
-│   └── profile.tsx      # Profil utilisateur
+│   └── profile.tsx      # Profil personnel (QuizUp style)
 ├── category-detail.tsx  # Page détail catégorie + mur social
-├── player-profile.tsx   # Profil public joueur
+├── player-profile.tsx   # Profil public joueur (QuizUp style)
 ├── chat.tsx             # Chat 1-à-1
 ├── matchmaking.tsx      # Écran matchmaking
 ├── results.tsx          # Résultats de match
@@ -138,14 +104,14 @@ frontend/app/
 ```
 
 ## Prochaines Étapes (Backlog)
-1. Authentification Google/Apple (fournira l'âge)
-2. Filtre joueurs par âge (post-auth Google/Apple)
-3. Filtre joueurs par distance (géolocalisation IP déjà implémentée)
-4. Support vidéo dans les posts du mur
-5. Plus de catégories et questions
-6. Deep Links pour partage
-7. Matchmaking temps réel (WebSocket)
-8. Système de saisons et récompenses
-9. Notifications push
-10. Titres de championnat (événements temporels)
-11. Refactoring: découper server.py en modules (routes, modèles, services)
+1. **P1** - Authentification Google/Apple (fournira l'âge)
+2. **P2** - Filtre joueurs par âge (post-auth Google/Apple)
+3. **P2** - Filtre joueurs par distance (géolocalisation IP déjà implémentée)
+4. **P2** - Support vidéo dans les posts du mur
+5. **P2** - Plus de catégories et questions
+6. **P3** - Deep Links pour partage
+7. **P3** - Matchmaking temps réel (WebSocket)
+8. **P3** - Système de saisons et récompenses
+9. **P3** - Notifications push
+10. **P3** - Titres de championnat (événements temporels)
+11. **Refactoring** - Découper server.py en modules
