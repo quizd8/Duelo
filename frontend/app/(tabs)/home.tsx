@@ -133,7 +133,6 @@ export default function HomeScreen() {
 
         <View style={styles.categoriesContainer}>
           {categories.map((cat, index) => {
-            const isSelected = selectedCategory === cat.id;
             const color = CATEGORY_COLORS[cat.id] || '#8A2BE2';
             return (
               <Animated.View
@@ -142,11 +141,8 @@ export default function HomeScreen() {
               >
                 <TouchableOpacity
                   testID={`category-${cat.id}`}
-                  style={[
-                    styles.categoryCard,
-                    isSelected && { borderColor: color, shadowColor: color, shadowOpacity: 0.3, shadowRadius: 12 },
-                  ]}
-                  onPress={() => selectCategory(cat.id)}
+                  style={styles.categoryCard}
+                  onPress={() => router.push(`/category-detail?id=${cat.id}`)}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.categoryIconBox, { backgroundColor: color + '20' }]}>
@@ -156,27 +152,12 @@ export default function HomeScreen() {
                     <Text style={styles.categoryName}>{cat.name}</Text>
                     <Text style={styles.categoryCount}>{cat.question_count} questions</Text>
                   </View>
-                  {isSelected && (
-                    <View style={[styles.selectedDot, { backgroundColor: color }]} />
-                  )}
+                  <Text style={[styles.categoryArrow, { color }]}>›</Text>
                 </TouchableOpacity>
               </Animated.View>
             );
           })}
         </View>
-
-        <Animated.View style={{ transform: [{ scale: playBtnAnim.interpolate({ inputRange: [0, 1, 1.08], outputRange: [1, 1, 1.08] }) }] }}>
-          <TouchableOpacity
-            testID="start-game-btn"
-            style={[styles.playButton, !selectedCategory && styles.playButtonDisabled]}
-            onPress={startGame}
-            disabled={!selectedCategory}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.playButtonIcon}>⚡</Text>
-            <Text style={styles.playButtonText}>LANCER UN DUEL</Text>
-          </TouchableOpacity>
-        </Animated.View>
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -223,6 +204,7 @@ const styles = StyleSheet.create({
   categoryName: { fontSize: 17, fontWeight: '700', color: '#FFF' },
   categoryCount: { fontSize: 12, color: '#525252', marginTop: 2, fontWeight: '500' },
   selectedDot: { width: 10, height: 10, borderRadius: 5 },
+  categoryArrow: { fontSize: 28, fontWeight: '300' },
   playButton: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
     backgroundColor: '#8A2BE2', borderRadius: 16, padding: 20,

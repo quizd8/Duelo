@@ -89,3 +89,51 @@ class Match(Base):
     xp_breakdown = Column(JSON, nullable=True)  # {base, victory, perfection, giant_slayer, streak}
     questions_data = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+
+class CategoryFollow(Base):
+    __tablename__ = 'category_follows'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), nullable=False, index=True)
+    category_id = Column(String(100), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'category_id', name='uq_user_category_follow'),
+    )
+
+
+class WallPost(Base):
+    __tablename__ = 'wall_posts'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), nullable=False, index=True)
+    category_id = Column(String(100), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    image_base64 = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class PostLike(Base):
+    __tablename__ = 'post_likes'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), nullable=False, index=True)
+    post_id = Column(String(36), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'post_id', name='uq_user_post_like'),
+    )
+
+
+class PostComment(Base):
+    __tablename__ = 'post_comments'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), nullable=False, index=True)
+    post_id = Column(String(36), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now)

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
-from models import User, Question, Match, generate_uuid
+from models import User, Question, Match, CategoryFollow, WallPost, PostLike, PostComment, generate_uuid
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -706,6 +706,307 @@ async def select_title(data: SelectTitleRequest, db: AsyncSession = Depends(get_
     user.selected_title = data.title
     await db.commit()
     return {"success": True, "selected_title": data.title}
+
+
+# ── Category Detail & Social Wall ──
+
+CATEGORY_DESCRIPTIONS = {
+    "series_tv": "Les plus grandes séries TV de tous les temps",
+    "geographie": "Capitales, pays et merveilles du monde",
+    "histoire": "Les grands événements qui ont façonné le monde",
+}
+
+class WallPostCreate(BaseModel):
+    user_id: str
+    content: str
+    image_base64: Optional[str] = None
+
+class CommentCreate(BaseModel):
+    user_id: str
+    content: str
+
+class FollowToggle(BaseModel):
+    user_id: str
+
+
+@api_router.get("/category/{category_id}/detail")
+async def get_category_detail(category_id: str, user_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """Full category detail with user-specific data."""
+    # Validate category
+    cat_names = {"series_tv": "Séries TV Cultes", "geographie": "Géographie Mondiale", "histoire": "Histoire de France"}
+    if category_id not in cat_names:
+        raise HTTPException(status_code=404, detail="Catégorie introuvable")
+
+    # Total questions in category
+    q_count = await db.execute(select(func.count(Question.id)).where(Question.category == category_id))
+    total_questions = q_count.scalar() or 0
+
+    # Followers count
+    f_count = await db.execute(select(func.count(CategoryFollow.id)).where(CategoryFollow.category_id == category_id))
+    followers_count = f_count.scalar() or 0
+
+    # User-specific data
+    user_level = 1
+    user_title = get_category_title(category_id, 1)
+    user_xp = 0
+    is_following = False
+    completion_pct = 0
+    xp_progress = get_xp_progress(0, 1)
+
+    if user_id:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user:
+            xp_field = CATEGORY_XP_FIELD.get(category_id)
+            user_xp = getattr(user, xp_field, 0) if xp_field else 0
+            user_level = get_category_level(user_xp)
+            user_title = get_category_title(category_id, user_level)
+            xp_progress = get_xp_progress(user_xp, user_level)
+
+            # Check if following
+            follow_check = await db.execute(
+                select(CategoryFollow).where(
+                    CategoryFollow.user_id == user_id,
+                    CategoryFollow.category_id == category_id
+                )
+            )
+            is_following = follow_check.scalar_one_or_none() is not None
+
+            # Completion: matches in category * 7 (unique estimate) / total questions
+            m_count = await db.execute(
+                select(func.count(Match.id)).where(
+                    Match.player1_id == user_id,
+                    Match.category == category_id
+                )
+            )
+            matches_in_cat = m_count.scalar() or 0
+            if total_questions > 0:
+                completion_pct = min(100, round(matches_in_cat * 7 / total_questions * 100))
+
+    return {
+        "id": category_id,
+        "name": cat_names[category_id],
+        "description": CATEGORY_DESCRIPTIONS.get(category_id, ""),
+        "total_questions": total_questions,
+        "followers_count": followers_count,
+        "user_level": user_level,
+        "user_title": user_title,
+        "user_xp": user_xp,
+        "xp_progress": xp_progress,
+        "is_following": is_following,
+        "completion_pct": completion_pct,
+    }
+
+
+@api_router.post("/category/{category_id}/follow")
+async def toggle_follow(category_id: str, data: FollowToggle, db: AsyncSession = Depends(get_db)):
+    """Toggle follow/unfollow a category."""
+    existing = await db.execute(
+        select(CategoryFollow).where(
+            CategoryFollow.user_id == data.user_id,
+            CategoryFollow.category_id == category_id
+        )
+    )
+    follow = existing.scalar_one_or_none()
+
+    if follow:
+        await db.delete(follow)
+        await db.commit()
+        return {"following": False}
+    else:
+        new_follow = CategoryFollow(user_id=data.user_id, category_id=category_id)
+        db.add(new_follow)
+        await db.commit()
+        return {"following": True}
+
+
+@api_router.get("/category/{category_id}/leaderboard")
+async def category_leaderboard(category_id: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
+    """Per-category leaderboard."""
+    xp_field = CATEGORY_XP_FIELD.get(category_id)
+    if not xp_field:
+        raise HTTPException(status_code=400, detail="Catégorie invalide")
+
+    order_col = getattr(User, xp_field)
+    result = await db.execute(
+        select(User).where(order_col > 0).order_by(order_col.desc()).limit(limit)
+    )
+    users = result.scalars().all()
+
+    entries = []
+    for i, u in enumerate(users):
+        cat_xp = getattr(u, xp_field, 0)
+        lvl = get_category_level(cat_xp)
+        entries.append({
+            "rank": i + 1,
+            "pseudo": u.pseudo,
+            "avatar_seed": u.avatar_seed,
+            "level": lvl,
+            "title": get_category_title(category_id, lvl),
+            "xp": cat_xp,
+        })
+    return entries
+
+
+@api_router.get("/category/{category_id}/wall")
+async def get_wall_posts(category_id: str, user_id: Optional[str] = None, limit: int = 20, offset: int = 0, db: AsyncSession = Depends(get_db)):
+    """Get wall posts for a category with likes/comments counts."""
+    result = await db.execute(
+        select(WallPost)
+        .where(WallPost.category_id == category_id)
+        .order_by(WallPost.created_at.desc())
+        .limit(limit).offset(offset)
+    )
+    posts = result.scalars().all()
+
+    posts_data = []
+    for p in posts:
+        # Get user info
+        u_res = await db.execute(select(User).where(User.id == p.user_id))
+        post_user = u_res.scalar_one_or_none()
+
+        # Likes count
+        lk_count = await db.execute(select(func.count(PostLike.id)).where(PostLike.post_id == p.id))
+        likes = lk_count.scalar() or 0
+
+        # Comments count
+        cm_count = await db.execute(select(func.count(PostComment.id)).where(PostComment.post_id == p.id))
+        comments = cm_count.scalar() or 0
+
+        # Is liked by current user
+        is_liked = False
+        if user_id:
+            lk_check = await db.execute(
+                select(PostLike).where(PostLike.post_id == p.id, PostLike.user_id == user_id)
+            )
+            is_liked = lk_check.scalar_one_or_none() is not None
+
+        posts_data.append({
+            "id": p.id,
+            "user": {
+                "id": post_user.id if post_user else "",
+                "pseudo": post_user.pseudo if post_user else "Inconnu",
+                "avatar_seed": post_user.avatar_seed if post_user else "",
+            },
+            "content": p.content,
+            "image_base64": p.image_base64,
+            "likes_count": likes,
+            "comments_count": comments,
+            "is_liked": is_liked,
+            "created_at": p.created_at.isoformat(),
+        })
+
+    return posts_data
+
+
+@api_router.post("/category/{category_id}/wall")
+async def create_wall_post(category_id: str, data: WallPostCreate, db: AsyncSession = Depends(get_db)):
+    """Create a new wall post."""
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="Le contenu ne peut pas être vide")
+
+    # Limit image size (500KB base64)
+    if data.image_base64 and len(data.image_base64) > 700000:
+        raise HTTPException(status_code=400, detail="Image trop volumineuse (max 500KB)")
+
+    post = WallPost(
+        user_id=data.user_id,
+        category_id=category_id,
+        content=data.content.strip(),
+        image_base64=data.image_base64,
+    )
+    db.add(post)
+    await db.commit()
+    await db.refresh(post)
+
+    # Get user info
+    u_res = await db.execute(select(User).where(User.id == data.user_id))
+    post_user = u_res.scalar_one_or_none()
+
+    return {
+        "id": post.id,
+        "user": {
+            "id": post_user.id if post_user else "",
+            "pseudo": post_user.pseudo if post_user else "Inconnu",
+            "avatar_seed": post_user.avatar_seed if post_user else "",
+        },
+        "content": post.content,
+        "image_base64": post.image_base64,
+        "likes_count": 0,
+        "comments_count": 0,
+        "is_liked": False,
+        "created_at": post.created_at.isoformat(),
+    }
+
+
+@api_router.post("/wall/{post_id}/like")
+async def toggle_like(post_id: str, data: FollowToggle, db: AsyncSession = Depends(get_db)):
+    """Toggle like on a wall post."""
+    existing = await db.execute(
+        select(PostLike).where(PostLike.post_id == post_id, PostLike.user_id == data.user_id)
+    )
+    like = existing.scalar_one_or_none()
+
+    if like:
+        await db.delete(like)
+        await db.commit()
+        return {"liked": False}
+    else:
+        new_like = PostLike(user_id=data.user_id, post_id=post_id)
+        db.add(new_like)
+        await db.commit()
+        return {"liked": True}
+
+
+@api_router.post("/wall/{post_id}/comment")
+async def add_comment(post_id: str, data: CommentCreate, db: AsyncSession = Depends(get_db)):
+    """Add a comment to a wall post."""
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="Le commentaire ne peut pas être vide")
+
+    comment = PostComment(user_id=data.user_id, post_id=post_id, content=data.content.strip())
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+
+    u_res = await db.execute(select(User).where(User.id == data.user_id))
+    user = u_res.scalar_one_or_none()
+
+    return {
+        "id": comment.id,
+        "user": {
+            "id": user.id if user else "",
+            "pseudo": user.pseudo if user else "Inconnu",
+            "avatar_seed": user.avatar_seed if user else "",
+        },
+        "content": comment.content,
+        "created_at": comment.created_at.isoformat(),
+    }
+
+
+@api_router.get("/wall/{post_id}/comments")
+async def get_comments(post_id: str, db: AsyncSession = Depends(get_db)):
+    """Get all comments for a wall post."""
+    result = await db.execute(
+        select(PostComment).where(PostComment.post_id == post_id).order_by(PostComment.created_at.asc())
+    )
+    comments = result.scalars().all()
+
+    comments_data = []
+    for c in comments:
+        u_res = await db.execute(select(User).where(User.id == c.user_id))
+        user = u_res.scalar_one_or_none()
+        comments_data.append({
+            "id": c.id,
+            "user": {
+                "id": user.id if user else "",
+                "pseudo": user.pseudo if user else "Inconnu",
+                "avatar_seed": user.avatar_seed if user else "",
+            },
+            "content": c.content,
+            "created_at": c.created_at.isoformat(),
+        })
+    return comments_data
 
 
 # ── Admin Routes ──
