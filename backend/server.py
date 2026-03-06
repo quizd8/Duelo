@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,14 +7,15 @@ import logging
 import random
 import hashlib
 import secrets
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from datetime import datetime, timezone
-from sqlalchemy import select, func, text
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import select, func, text, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
-from models import User, Question, Match, CategoryFollow, WallPost, PostLike, PostComment, generate_uuid
+from models import User, Question, Match, CategoryFollow, WallPost, PostLike, PostComment, PlayerFollow, ChatMessage, generate_uuid
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -265,7 +266,7 @@ TOTAL_QUESTIONS = 7
 # ── Auth Routes ──
 
 @api_router.post("/auth/register-guest", response_model=UserResponse)
-async def register_guest(data: GuestRegister, db: AsyncSession = Depends(get_db)):
+async def register_guest(data: GuestRegister, request: Request, db: AsyncSession = Depends(get_db)):
     pseudo = data.pseudo.strip()
     if len(pseudo) < 3 or len(pseudo) > 20:
         raise HTTPException(status_code=400, detail="Le pseudo doit contenir entre 3 et 20 caractères")
@@ -274,7 +275,10 @@ async def register_guest(data: GuestRegister, db: AsyncSession = Depends(get_db)
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Ce pseudo est déjà pris")
 
-    user = User(pseudo=pseudo, is_guest=True)
+    # Detect country from IP
+    country = await detect_country_from_ip(request)
+
+    user = User(pseudo=pseudo, is_guest=True, country=country)
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -838,6 +842,7 @@ async def category_leaderboard(category_id: str, limit: int = 20, db: AsyncSessi
         cat_xp = getattr(u, xp_field, 0)
         lvl = get_category_level(cat_xp)
         entries.append({
+            "id": u.id,
             "rank": i + 1,
             "pseudo": u.pseudo,
             "avatar_seed": u.avatar_seed,
@@ -1007,6 +1012,406 @@ async def get_comments(post_id: str, db: AsyncSession = Depends(get_db)):
             "created_at": c.created_at.isoformat(),
         })
     return comments_data
+
+
+# ── Country Flag Mapping ──
+
+COUNTRY_FLAGS = {
+    "France": "🇫🇷", "Germany": "🇩🇪", "Spain": "🇪🇸", "Italy": "🇮🇹", "United Kingdom": "🇬🇧",
+    "United States": "🇺🇸", "Canada": "🇨🇦", "Brazil": "🇧🇷", "Japan": "🇯🇵", "China": "🇨🇳",
+    "Australia": "🇦🇺", "India": "🇮🇳", "Mexico": "🇲🇽", "Russia": "🇷🇺", "South Korea": "🇰🇷",
+    "Netherlands": "🇳🇱", "Belgium": "🇧🇪", "Switzerland": "🇨🇭", "Portugal": "🇵🇹", "Sweden": "🇸🇪",
+    "Norway": "🇳🇴", "Denmark": "🇩🇰", "Finland": "🇫🇮", "Poland": "🇵🇱", "Austria": "🇦🇹",
+    "Ireland": "🇮🇪", "Argentina": "🇦🇷", "Colombia": "🇨🇴", "Chile": "🇨🇱", "Morocco": "🇲🇦",
+    "Algeria": "🇩🇿", "Tunisia": "🇹🇳", "Egypt": "🇪🇬", "Turkey": "🇹🇷", "Saudi Arabia": "🇸🇦",
+    "South Africa": "🇿🇦", "Nigeria": "🇳🇬", "Indonesia": "🇮🇩", "Thailand": "🇹🇭", "Vietnam": "🇻🇳",
+    "Philippines": "🇵🇭", "Malaysia": "🇲🇾", "Singapore": "🇸🇬", "New Zealand": "🇳🇿",
+    "Israel": "🇮🇱", "Greece": "🇬🇷", "Czech Republic": "🇨🇿", "Romania": "🇷🇴", "Hungary": "🇭🇺",
+    "Ukraine": "🇺🇦", "Croatia": "🇭🇷", "Peru": "🇵🇪", "Venezuela": "🇻🇪", "Ecuador": "🇪🇨",
+}
+
+
+async def detect_country_from_ip(request: Request) -> Optional[str]:
+    """Detect country from IP using ip-api.com."""
+    try:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else None)
+        if not client_ip or client_ip in ("127.0.0.1", "::1", "localhost"):
+            return None
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(f"http://ip-api.com/json/{client_ip}?fields=status,country,countryCode,city,regionName")
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "success":
+                    return data.get("country")
+    except Exception:
+        pass
+    return None
+
+
+# ── Player Profile & Follow Pydantic Models ──
+
+class PlayerFollowToggle(BaseModel):
+    follower_id: str
+
+class ChatSend(BaseModel):
+    sender_id: str
+    receiver_id: str
+    content: str
+
+class PlayerSearchRequest(BaseModel):
+    query: Optional[str] = None
+    category: Optional[str] = None
+    country: Optional[str] = None
+    limit: int = 20
+
+
+# ── Player Public Profile ──
+
+@api_router.get("/player/{user_id}/profile")
+async def get_player_profile(user_id: str, viewer_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """Full public profile of a player."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Joueur non trouvé")
+
+    # Per-category stats
+    categories_data = {}
+    for cat_key, xp_field in CATEGORY_XP_FIELD.items():
+        cat_xp = getattr(user, xp_field, 0)
+        cat_level = get_category_level(cat_xp)
+        cat_title = get_category_title(cat_key, cat_level)
+        categories_data[cat_key] = {
+            "xp": cat_xp,
+            "level": cat_level,
+            "title": cat_title,
+        }
+
+    # Champion titles (rank #1 per category)
+    champion_titles = []
+    for cat_key, xp_field in CATEGORY_XP_FIELD.items():
+        cat_xp = getattr(user, xp_field, 0)
+        if cat_xp > 0:
+            top_result = await db.execute(
+                select(User).where(getattr(User, xp_field) > 0)
+                .order_by(getattr(User, xp_field).desc()).limit(1)
+            )
+            top_user = top_result.scalar_one_or_none()
+            if top_user and top_user.id == user.id:
+                champion_titles.append({
+                    "category": cat_key,
+                    "category_name": CATEGORY_MAP.get(cat_key, cat_key),
+                    "scope": "Monde",
+                    "date": datetime.now(timezone.utc).strftime("%B %Y").capitalize(),
+                })
+
+    # Followers / Following counts
+    followers_count_res = await db.execute(
+        select(func.count(PlayerFollow.id)).where(PlayerFollow.followed_id == user_id)
+    )
+    followers_count = followers_count_res.scalar() or 0
+
+    following_count_res = await db.execute(
+        select(func.count(PlayerFollow.id)).where(PlayerFollow.follower_id == user_id)
+    )
+    following_count = following_count_res.scalar() or 0
+
+    # Is viewer following this player?
+    is_following = False
+    if viewer_id and viewer_id != user_id:
+        f_check = await db.execute(
+            select(PlayerFollow).where(
+                PlayerFollow.follower_id == viewer_id,
+                PlayerFollow.followed_id == user_id
+            )
+        )
+        is_following = f_check.scalar_one_or_none() is not None
+
+    # Wall posts by this user across all categories
+    posts_result = await db.execute(
+        select(WallPost).where(WallPost.user_id == user_id)
+        .order_by(WallPost.created_at.desc()).limit(20)
+    )
+    user_posts = posts_result.scalars().all()
+
+    posts_data = []
+    for p in user_posts:
+        lk_count = await db.execute(select(func.count(PostLike.id)).where(PostLike.post_id == p.id))
+        likes = lk_count.scalar() or 0
+        cm_count = await db.execute(select(func.count(PostComment.id)).where(PostComment.post_id == p.id))
+        comments = cm_count.scalar() or 0
+
+        is_liked = False
+        if viewer_id:
+            lk_check = await db.execute(
+                select(PostLike).where(PostLike.post_id == p.id, PostLike.user_id == viewer_id)
+            )
+            is_liked = lk_check.scalar_one_or_none() is not None
+
+        posts_data.append({
+            "id": p.id,
+            "category_id": p.category_id,
+            "category_name": CATEGORY_MAP.get(p.category_id, p.category_id),
+            "content": p.content,
+            "image_base64": p.image_base64,
+            "likes_count": likes,
+            "comments_count": comments,
+            "is_liked": is_liked,
+            "created_at": p.created_at.isoformat(),
+        })
+
+    country_flag = COUNTRY_FLAGS.get(user.country or "", "🌍")
+
+    return {
+        "id": user.id,
+        "pseudo": user.pseudo,
+        "avatar_seed": user.avatar_seed,
+        "selected_title": user.selected_title or get_category_title("series_tv", 1),
+        "country": user.country,
+        "country_flag": country_flag,
+        "matches_played": user.matches_played,
+        "matches_won": user.matches_won,
+        "win_rate": round(user.matches_won / max(user.matches_played, 1) * 100),
+        "current_streak": user.current_streak,
+        "best_streak": user.best_streak,
+        "total_xp": user.total_xp,
+        "categories": categories_data,
+        "champion_titles": champion_titles,
+        "followers_count": followers_count,
+        "following_count": following_count,
+        "is_following": is_following,
+        "posts": posts_data,
+    }
+
+
+# ── Player Follow / Unfollow ──
+
+@api_router.post("/player/{user_id}/follow")
+async def toggle_player_follow(user_id: str, data: PlayerFollowToggle, db: AsyncSession = Depends(get_db)):
+    """Toggle follow/unfollow a player."""
+    if data.follower_id == user_id:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous suivre vous-même")
+
+    existing = await db.execute(
+        select(PlayerFollow).where(
+            PlayerFollow.follower_id == data.follower_id,
+            PlayerFollow.followed_id == user_id
+        )
+    )
+    follow = existing.scalar_one_or_none()
+
+    if follow:
+        await db.delete(follow)
+        await db.commit()
+        return {"following": False}
+    else:
+        new_follow = PlayerFollow(follower_id=data.follower_id, followed_id=user_id)
+        db.add(new_follow)
+        await db.commit()
+        return {"following": True}
+
+
+# ── Player Search ──
+
+@api_router.get("/players/search")
+async def search_players(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    country: Optional[str] = None,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Search players with filters."""
+    query = select(User)
+    
+    if q and q.strip():
+        query = query.where(User.pseudo.ilike(f"%{q.strip()}%"))
+    
+    if country and country.strip():
+        query = query.where(User.country == country.strip())
+    
+    if category and category in CATEGORY_XP_FIELD:
+        xp_field = CATEGORY_XP_FIELD[category]
+        query = query.where(getattr(User, xp_field) > 0).order_by(getattr(User, xp_field).desc())
+    else:
+        query = query.order_by(User.total_xp.desc())
+    
+    query = query.limit(limit)
+    result = await db.execute(query)
+    users = result.scalars().all()
+
+    players = []
+    for u in users:
+        best_cat = None
+        best_level = 0
+        for cat_key, xp_f in CATEGORY_XP_FIELD.items():
+            lvl = get_category_level(getattr(u, xp_f, 0))
+            if lvl > best_level:
+                best_level = lvl
+                best_cat = cat_key
+
+        players.append({
+            "id": u.id,
+            "pseudo": u.pseudo,
+            "avatar_seed": u.avatar_seed,
+            "country": u.country,
+            "country_flag": COUNTRY_FLAGS.get(u.country or "", "🌍"),
+            "total_xp": u.total_xp,
+            "matches_played": u.matches_played,
+            "selected_title": u.selected_title or (get_category_title(best_cat, best_level) if best_cat else "Novice"),
+            "best_category": best_cat,
+            "best_level": best_level,
+        })
+    return players
+
+
+# ── Chat System ──
+
+@api_router.post("/chat/send")
+async def send_message(data: ChatSend, db: AsyncSession = Depends(get_db)):
+    """Send a chat message."""
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
+    if len(data.content) > 500:
+        raise HTTPException(status_code=400, detail="Message trop long (max 500 caractères)")
+    if data.sender_id == data.receiver_id:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous envoyer un message")
+
+    msg = ChatMessage(
+        sender_id=data.sender_id,
+        receiver_id=data.receiver_id,
+        content=data.content.strip(),
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+
+    # Get sender info
+    s_res = await db.execute(select(User).where(User.id == data.sender_id))
+    sender = s_res.scalar_one_or_none()
+
+    return {
+        "id": msg.id,
+        "sender_id": msg.sender_id,
+        "receiver_id": msg.receiver_id,
+        "sender_pseudo": sender.pseudo if sender else "Inconnu",
+        "content": msg.content,
+        "read": msg.read,
+        "created_at": msg.created_at.isoformat(),
+    }
+
+
+@api_router.get("/chat/conversations/{user_id}")
+async def get_conversations(user_id: str, db: AsyncSession = Depends(get_db)):
+    """Get list of conversations for a user, with last message preview."""
+    # Clean up old messages (> 7 days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    await db.execute(
+        text("DELETE FROM chat_messages WHERE created_at < :cutoff"),
+        {"cutoff": cutoff}
+    )
+    await db.commit()
+
+    # Get all unique conversation partners
+    sent_result = await db.execute(
+        select(ChatMessage.receiver_id).where(ChatMessage.sender_id == user_id).distinct()
+    )
+    received_result = await db.execute(
+        select(ChatMessage.sender_id).where(ChatMessage.receiver_id == user_id).distinct()
+    )
+
+    partner_ids = set()
+    for row in sent_result:
+        partner_ids.add(row[0])
+    for row in received_result:
+        partner_ids.add(row[0])
+
+    conversations = []
+    for pid in partner_ids:
+        # Get last message in conversation
+        last_msg_res = await db.execute(
+            select(ChatMessage).where(
+                or_(
+                    and_(ChatMessage.sender_id == user_id, ChatMessage.receiver_id == pid),
+                    and_(ChatMessage.sender_id == pid, ChatMessage.receiver_id == user_id),
+                )
+            ).order_by(ChatMessage.created_at.desc()).limit(1)
+        )
+        last_msg = last_msg_res.scalar_one_or_none()
+        if not last_msg:
+            continue
+
+        # Unread count
+        unread_res = await db.execute(
+            select(func.count(ChatMessage.id)).where(
+                ChatMessage.sender_id == pid,
+                ChatMessage.receiver_id == user_id,
+                ChatMessage.read == False,
+            )
+        )
+        unread = unread_res.scalar() or 0
+
+        # Partner info
+        p_res = await db.execute(select(User).where(User.id == pid))
+        partner = p_res.scalar_one_or_none()
+        if not partner:
+            continue
+
+        conversations.append({
+            "partner_id": pid,
+            "partner_pseudo": partner.pseudo,
+            "partner_avatar_seed": partner.avatar_seed,
+            "last_message": last_msg.content[:100],
+            "last_message_time": last_msg.created_at.isoformat(),
+            "is_sender": last_msg.sender_id == user_id,
+            "unread_count": unread,
+        })
+
+    # Sort by last message time
+    conversations.sort(key=lambda x: x["last_message_time"], reverse=True)
+    return conversations
+
+
+@api_router.get("/chat/{user_id}/messages")
+async def get_chat_messages(user_id: str, with_user: str, limit: int = 50, db: AsyncSession = Depends(get_db)):
+    """Get messages between two users."""
+    result = await db.execute(
+        select(ChatMessage).where(
+            or_(
+                and_(ChatMessage.sender_id == user_id, ChatMessage.receiver_id == with_user),
+                and_(ChatMessage.sender_id == with_user, ChatMessage.receiver_id == user_id),
+            )
+        ).order_by(ChatMessage.created_at.asc()).limit(limit)
+    )
+    messages = result.scalars().all()
+
+    # Mark received messages as read
+    for m in messages:
+        if m.receiver_id == user_id and not m.read:
+            m.read = True
+    await db.commit()
+
+    return [{
+        "id": m.id,
+        "sender_id": m.sender_id,
+        "receiver_id": m.receiver_id,
+        "content": m.content,
+        "read": m.read,
+        "created_at": m.created_at.isoformat(),
+    } for m in messages]
+
+
+@api_router.get("/chat/unread-count/{user_id}")
+async def get_unread_count(user_id: str, db: AsyncSession = Depends(get_db)):
+    """Get total unread message count for a user."""
+    result = await db.execute(
+        select(func.count(ChatMessage.id)).where(
+            ChatMessage.receiver_id == user_id,
+            ChatMessage.read == False,
+        )
+    )
+    return {"unread_count": result.scalar() or 0}
 
 
 # ── Admin Routes ──

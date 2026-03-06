@@ -29,6 +29,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="players"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon label="Joueurs" focused={focused} icon="👥" />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           tabBarIcon: ({ focused }) => <TabIcon label="Profil" focused={focused} icon="👤" />,

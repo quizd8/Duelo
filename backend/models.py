@@ -137,3 +137,27 @@ class PostComment(Base):
     post_id = Column(String(36), nullable=False, index=True)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class PlayerFollow(Base):
+    __tablename__ = 'player_follows'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    follower_id = Column(String(36), nullable=False, index=True)
+    followed_id = Column(String(36), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint('follower_id', 'followed_id', name='uq_player_follow'),
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = 'chat_messages'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    sender_id = Column(String(36), nullable=False, index=True)
+    receiver_id = Column(String(36), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now)

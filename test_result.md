@@ -117,6 +117,90 @@ backend:
           agent: "main"
           comment: "Guest registration works. Creates user with unique pseudo."
 
+  - task: "Player Profile API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /api/player/{user_id}/profile?viewer_id=X fully functional. Returns complete public profile with pseudo, avatar_seed, selected_title, country, country_flag, matches_played, followers_count, following_count, is_following flag, per-category stats (xp/level/title), champion_titles array, and cross-category posts array with likes/comments. Viewer-specific data correctly included (is_following status). Profile structure matches review request specification exactly."
+
+  - task: "Player Follow System API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "POST /api/player/{user_id}/follow with {follower_id} working perfectly. Toggle functionality confirmed: follow returns {following: true}, unfollow returns {following: false}. Followers count updates correctly in player profile. Self-follow properly rejected with 400 error. Follow/unfollow state persists and reflects in profile API is_following flag."
+
+  - task: "Player Search API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /api/players/search with filters fully functional. Search by pseudo (q parameter) returns matching users. Category filtering works correctly. Empty results handled properly with empty array. Player objects include all required fields: id, pseudo, avatar_seed, country, country_flag, total_xp, matches_played, selected_title, best_category, best_level. Search results properly ordered by XP."
+
+  - task: "Chat Send Message API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "POST /api/chat/send working with full validation. Valid messages sent successfully with proper response structure (id, sender_id, receiver_id, sender_pseudo, content, read, created_at). Empty messages rejected with 400. Messages >500 chars rejected with 400. Self-messaging rejected with 400. All error handling working as specified in review request."
+
+  - task: "Chat Conversations API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /api/chat/conversations/{user_id} working correctly. Returns array of conversations with last message preview and unread count. Message cleanup (7-day TTL) functioning. Conversation objects include partner_id, partner_pseudo, partner_avatar_seed, last_message, last_message_time, is_sender flag, unread_count. Conversations sorted by last message time."
+
+  - task: "Chat Messages API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /api/chat/{user_id}/messages?with_user=X fully functional. Returns messages array with proper structure. Auto-marks messages as read when fetched. Message objects include id, sender_id, receiver_id, content, read status, created_at. Messages properly filtered to conversation between two specific users."
+
+  - task: "Chat Unread Count API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /api/chat/unread-count/{user_id} working correctly. Returns {unread_count} with accurate count of unread messages. Count updates properly when messages are marked as read via messages API. Full flow tested: send message → check unread (1) → fetch messages (auto-mark read) → check unread again (0)."
+
   - task: "Game Questions API"
     implemented: true
     working: true
@@ -401,3 +485,5 @@ agent_communication:
       message: "New social wall feature complete. All backend APIs for the social wall have been validated via curl: category detail, follow/unfollow, leaderboard, create/get wall posts, like toggle, create/get comments. All working correctly. Please test the NEW social wall backend APIs comprehensively and test the full frontend flow. Frontend page is at /category-detail?id=series_tv. User registration is guest-based (pseudo only). Key endpoints to test: 1) GET /api/category/{id}/detail?user_id=X 2) POST /api/category/{id}/follow {user_id} 3) GET /api/category/{id}/leaderboard 4) GET /api/category/{id}/wall?user_id=X 5) POST /api/category/{id}/wall {user_id, content, image_base64?} 6) POST /api/wall/{post_id}/like {user_id} 7) POST /api/wall/{post_id}/comment {user_id, content} 8) GET /api/wall/{post_id}/comments. Previous test report at /app/test_reports/iteration_1.json covers earlier features (matchmaking, XP system, profile, title selection) - DO NOT retest those."
     - agent: "testing" 
       message: "✅ SOCIAL WALL BACKEND TESTING COMPLETE - ALL 6 APIs FULLY FUNCTIONAL. Comprehensive testing performed following exact review request flow: 1) Guest registration working with proper pseudo validation. 2) Category detail API tested for all 3 categories (series_tv, geographie, histoire) - returns complete user-specific data including level, title, XP, follow status, completion %. 3) Follow/unfollow toggle working perfectly - properly updates followers count and follow status. 4) Category leaderboard returns top users with correct rank, pseudo, avatar_seed, level, title, XP data. 5) Wall posts creation/retrieval fully functional - posts created with proper user data, likes_count, comments_count, is_liked flag. 6) Like toggle working correctly - toggles like/unlike state and updates counts. 7) Comments creation/retrieval working - proper user objects, content validation. 8) Invalid cases properly handled - empty content rejected with 400, invalid categories rejected. Complete test flow executed: register → get category detail → follow category → create post → like post → unlike → comment → get comments → get wall posts → get leaderboard → unfollow → test invalid cases. All social wall backend APIs ready for production use."
+    - agent: "testing"
+      message: "🎯 NEW SOCIAL FEATURES BACKEND TESTING COMPLETE - ALL 7 APIs FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications: 1) Player Profile API (GET /api/player/{user_id}/profile?viewer_id=X) - Returns complete public profile with all required fields: pseudo, avatar_seed, selected_title, country, country_flag, matches_played, followers_count, following_count, is_following flag, per-category stats (xp/level/title), champion_titles array, cross-category posts with likes/comments. 2) Player Follow System (POST /api/player/{user_id}/follow) - Toggle functionality working perfectly, self-follow rejected (400), followers count updates correctly. 3) Player Search (GET /api/players/search) - Search by pseudo, category filtering, empty results handled properly. 4) Chat Send (POST /api/chat/send) - Full validation working: empty messages (400), >500 chars (400), self-messages (400). 5) Chat Conversations (GET /api/chat/conversations/{user_id}) - Returns conversations with unread counts, 7-day TTL cleanup working. 6) Chat Messages (GET /api/chat/{user_id}/messages) - Auto-marks as read, proper message structure. 7) Chat Unread Count (GET /api/chat/unread-count/{user_id}) - Accurate counting, updates on read. Full test flow executed: register 2 users → get profile → follow/unfollow → search players → send message → check conversations → fetch messages → check unread counts → validate error cases. ALL NEW SOCIAL FEATURES READY FOR PRODUCTION."

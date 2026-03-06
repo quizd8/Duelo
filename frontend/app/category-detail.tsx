@@ -42,7 +42,7 @@ type CommentData = {
 };
 
 type LeaderEntry = {
-  rank: number; pseudo: string; avatar_seed: string;
+  id: string; rank: number; pseudo: string; avatar_seed: string;
   level: number; title: string; xp: number;
 };
 
@@ -338,7 +338,11 @@ export default function CategoryDetailScreen() {
             posts.map(post => (
               <View key={post.id} data-testid={`post-card-${post.id}`} style={styles.postCard}>
                 {/* Post Header */}
-                <View style={styles.postHeader}>
+                <TouchableOpacity
+                  style={styles.postHeader}
+                  onPress={() => router.push(`/player-profile?id=${post.user.id}`)}
+                  activeOpacity={0.7}
+                >
                   <View style={styles.postAvatar}>
                     <Text style={styles.postAvatarText}>{post.user.pseudo[0]?.toUpperCase()}</Text>
                   </View>
@@ -346,7 +350,7 @@ export default function CategoryDetailScreen() {
                     <Text style={styles.postUsername}>{post.user.pseudo}</Text>
                     <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
 
                 {/* Post Content */}
                 <Text style={styles.postContent}>{post.content}</Text>
@@ -482,7 +486,14 @@ export default function CategoryDetailScreen() {
                 data={leaderboard}
                 keyExtractor={item => item.pseudo}
                 renderItem={({ item }) => (
-                  <View style={styles.leaderRow}>
+                  <TouchableOpacity
+                    style={styles.leaderRow}
+                    onPress={() => {
+                      setShowLeaderboard(false);
+                      router.push(`/player-profile?id=${item.id}`);
+                    }}
+                    activeOpacity={0.7}
+                  >
                     <Text style={[styles.leaderRank,
                       item.rank === 1 && { color: '#FFD700' },
                       item.rank === 2 && { color: '#C0C0C0' },
@@ -499,7 +510,7 @@ export default function CategoryDetailScreen() {
                       <Text style={styles.leaderLevel}>Niv. {item.level}</Text>
                       <Text style={styles.leaderXp}>{item.xp.toLocaleString()} XP</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 )}
               />
             )}
