@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DueloHeader from '../../components/DueloHeader';
 
 export default function AccueilScreen() {
   return (
     <SafeAreaView style={styles.container}>
+      <DueloHeader />
       <View style={styles.content}>
         <Text style={styles.icon}>🏠</Text>
         <Text style={styles.title}>Accueil</Text>

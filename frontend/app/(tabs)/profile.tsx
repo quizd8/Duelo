@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import DueloHeader from '../../components/DueloHeader';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -115,6 +116,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={s.container}>
+      <DueloHeader />
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* ── Profile Header: Avatar left + info right ── */}
@@ -276,10 +278,39 @@ export default function ProfileScreen() {
           ))
         )}
 
-        {/* Logout */}
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-          <Text style={s.logoutText}>Se déconnecter</Text>
-        </TouchableOpacity>
+        {/* ── Paramètres ── */}
+        <Text style={s.sectionTitle}>PARAMÈTRES</Text>
+        <View style={s.settingsWrap}>
+          <TouchableOpacity style={s.settingsRow} onPress={() => setShowTitleModal(true)}>
+            <Text style={s.settingsIcon}>🏷️</Text>
+            <Text style={s.settingsText}>Changer de titre</Text>
+            <Text style={s.settingsArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={s.settingsDivider} />
+          <TouchableOpacity style={s.settingsRow}>
+            <Text style={s.settingsIcon}>🔔</Text>
+            <Text style={s.settingsText}>Notifications</Text>
+            <Text style={s.settingsArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={s.settingsDivider} />
+          <TouchableOpacity style={s.settingsRow}>
+            <Text style={s.settingsIcon}>🌐</Text>
+            <Text style={s.settingsText}>Langue</Text>
+            <Text style={s.settingsArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={s.settingsDivider} />
+          <TouchableOpacity style={s.settingsRow}>
+            <Text style={s.settingsIcon}>📜</Text>
+            <Text style={s.settingsText}>Conditions d'utilisation</Text>
+            <Text style={s.settingsArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={s.settingsDivider} />
+          <TouchableOpacity style={[s.settingsRow]} onPress={handleLogout} activeOpacity={0.7}>
+            <Text style={s.settingsIcon}>🚪</Text>
+            <Text style={[s.settingsText, { color: '#FF3B30' }]}>Se déconnecter</Text>
+            <Text style={[s.settingsArrow, { color: '#FF3B30' }]}>›</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Title Selection Modal */}
@@ -444,12 +475,20 @@ const s = StyleSheet.create({
   resultLoss: { color: '#FF3B30' },
   matchXp: { color: '#00FFFF', fontSize: 10, fontWeight: '700' },
 
-  /* Logout */
-  logoutBtn: {
-    marginTop: 24, marginHorizontal: GRID_PAD, borderWidth: 1, borderColor: 'rgba(255,59,48,0.3)',
-    borderRadius: 12, padding: 14, alignItems: 'center',
+  /* Settings (Paramètres) */
+  settingsWrap: {
+    marginHorizontal: GRID_PAD, borderRadius: 14, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 24,
   },
-  logoutText: { color: '#FF3B30', fontSize: 14, fontWeight: '600' },
+  settingsRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16,
+  },
+  settingsIcon: { fontSize: 18, marginRight: 12 },
+  settingsText: { flex: 1, color: '#E0E0E0', fontSize: 15, fontWeight: '600' },
+  settingsArrow: { color: '#525252', fontSize: 22, fontWeight: '300' },
+  settingsDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.04)', marginHorizontal: 16 },
 
   /* Modal */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', paddingHorizontal: 24 },

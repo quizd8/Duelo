@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import DueloHeader from '../../components/DueloHeader';
 
 const { width } = Dimensions.get('window');
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
@@ -127,9 +128,7 @@ export default function PlayersScreen() {
   return (
     <SafeAreaView style={st.container}>
       {/* Header */}
-      <View style={st.header}>
-        <Text style={st.headerTitle}>JOUEURS</Text>
-      </View>
+      <DueloHeader />
 
       {/* Tabs */}
       <View style={st.tabsRow}>
@@ -298,9 +297,6 @@ export default function PlayersScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  headerTitle: { fontSize: 12, fontWeight: '800', color: '#525252', letterSpacing: 3 },
 
   // Tabs
   tabsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 16 },
