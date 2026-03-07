@@ -2366,6 +2366,165 @@ async def update_notification_settings(user_id: str, data: NotifSettingsUpdate, 
     }
 
 
+# ── Home Feed ──
+
+CATEGORY_COLORS = {
+    "series_tv": "#E040FB",
+    "geographie": "#00FFFF",
+    "histoire": "#FFD700",
+    "cinema": "#FF6B6B",
+    "sport": "#00FF9D",
+    "musique": "#FF8C00",
+    "sciences": "#7B68EE",
+    "gastronomie": "#FF69B4",
+}
+
+@api_router.get("/feed/home/{user_id}")
+async def get_home_feed(user_id: str, db: AsyncSession = Depends(get_db)):
+    """Get home feed data: pending duels, social wall, user stats."""
+    # Get user
+    u_res = await db.execute(select(User).where(User.id == user_id))
+    user = u_res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+    # ── Pending Duels (recent matches as rematches) ──
+    recent_matches = await db.execute(
+        select(Match).where(Match.player1_id == user_id)
+        .order_by(Match.created_at.desc()).limit(5)
+    )
+    matches = recent_matches.scalars().all()
+
+    pending_duels = []
+    for m in matches:
+        cat_color = CATEGORY_COLORS.get(m.category, "#8A2BE2")
+        cat_name = CATEGORY_MAP.get(m.category, m.category)
+        pending_duels.append({
+            "id": m.id,
+            "opponent_pseudo": m.player2_pseudo,
+            "opponent_avatar_seed": secrets.token_hex(4),  # Bot avatar
+            "category": m.category,
+            "category_name": cat_name,
+            "category_color": cat_color,
+            "player_score": m.player1_score,
+            "opponent_score": m.player2_score,
+            "won": m.winner_id == user_id,
+            "created_at": m.created_at.isoformat(),
+        })
+
+    # ── Social Feed (mix of records, posts, events) ──
+    social_feed = []
+
+    # 1. Recent records (perfect scores, high streaks, new titles)
+    perfect_matches = await db.execute(
+        select(Match, User).join(User, User.id == Match.player1_id)
+        .where(Match.player1_correct == 7)
+        .order_by(Match.created_at.desc()).limit(5)
+    )
+    for match_row in perfect_matches:
+        m = match_row[0]
+        u = match_row[1]
+        cat_name = CATEGORY_MAP.get(m.category, m.category)
+        cat_color = CATEGORY_COLORS.get(m.category, "#8A2BE2")
+        social_feed.append({
+            "type": "record",
+            "id": f"record_{m.id}",
+            "user_pseudo": u.pseudo,
+            "user_avatar_seed": u.avatar_seed,
+            "category": m.category,
+            "category_name": cat_name,
+            "category_color": cat_color,
+            "title": "Score parfait !",
+            "body": f"@{u.pseudo} a réalisé un 7/7 en {cat_name} !",
+            "score": f"{m.player1_score} - {m.player2_score}",
+            "icon": "🏆",
+            "xp_earned": m.xp_earned or 0,
+            "created_at": m.created_at.isoformat(),
+        })
+
+    # 2. Community posts (recent wall posts across all categories)
+    recent_posts = await db.execute(
+        select(WallPost).order_by(WallPost.created_at.desc()).limit(8)
+    )
+    posts = recent_posts.scalars().all()
+
+    for p in posts:
+        p_user_res = await db.execute(select(User).where(User.id == p.user_id))
+        p_user = p_user_res.scalar_one_or_none()
+
+        lk_count = await db.execute(select(func.count(PostLike.id)).where(PostLike.post_id == p.id))
+        likes = lk_count.scalar() or 0
+        cm_count = await db.execute(select(func.count(PostComment.id)).where(PostComment.post_id == p.id))
+        comments = cm_count.scalar() or 0
+
+        is_liked = False
+        lk_check = await db.execute(
+            select(PostLike).where(PostLike.post_id == p.id, PostLike.user_id == user_id)
+        )
+        is_liked = lk_check.scalar_one_or_none() is not None
+
+        cat_color = CATEGORY_COLORS.get(p.category_id, "#8A2BE2")
+        cat_name = CATEGORY_MAP.get(p.category_id, p.category_id)
+
+        social_feed.append({
+            "type": "community",
+            "id": f"post_{p.id}",
+            "post_id": p.id,
+            "user_id": p.user_id,
+            "user_pseudo": p_user.pseudo if p_user else "Inconnu",
+            "user_avatar_seed": p_user.avatar_seed if p_user else "",
+            "category": p.category_id,
+            "category_name": cat_name,
+            "category_color": cat_color,
+            "content": p.content,
+            "has_image": bool(p.image_base64),
+            "likes_count": likes,
+            "comments_count": comments,
+            "is_liked": is_liked,
+            "created_at": p.created_at.isoformat(),
+        })
+
+    # 3. Events (XP boosts, announcements - generated dynamically)
+    import random as rnd
+    event_categories = rnd.sample(list(CATEGORY_MAP.keys()), min(2, len(CATEGORY_MAP)))
+    for ec in event_categories:
+        cat_name = CATEGORY_MAP[ec]
+        cat_color = CATEGORY_COLORS.get(ec, "#8A2BE2")
+        social_feed.append({
+            "type": "event",
+            "id": f"event_{ec}",
+            "category": ec,
+            "category_name": cat_name,
+            "category_color": cat_color,
+            "title": f"XP x2 en {cat_name}",
+            "body": f"Double XP sur le thème {cat_name} pendant 1h !",
+            "icon": "⚡",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Sort social feed by created_at
+    social_feed.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+    # User greeting stats
+    country_flag = COUNTRY_FLAGS.get(user.country or "", "🌍")
+
+    return {
+        "user": {
+            "pseudo": user.pseudo,
+            "avatar_seed": user.avatar_seed,
+            "total_xp": user.total_xp,
+            "current_streak": user.current_streak,
+            "streak_badge": get_streak_badge(user.current_streak),
+            "matches_played": user.matches_played,
+            "matches_won": user.matches_won,
+            "country_flag": country_flag,
+            "selected_title": user.selected_title or "Novice",
+        },
+        "pending_duels": pending_duels[:5],
+        "social_feed": social_feed[:20],
+    }
+
+
 # ── Health ──
 
 @api_router.get("/")
