@@ -529,12 +529,56 @@ metadata:
           agent: "testing"
           comment: "Trending data API fully functional. Tested all requirements from review request: 1) Response structure validated: {popular_categories: [...], trending_tags: [...], top_players: [...]}. 2) popular_categories contains 5 entries with correct fields: id, name, match_count. 3) trending_tags contains 8 entries with correct fields: tag, icon, type. 4) top_players contains 5 entries with correct fields: id, pseudo, avatar_seed, total_xp, country_flag. All trending data structures working as specified."
 
+  - task: "Enhanced Chat Send Message API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/chat/send enhanced with message_type (text, image, game_card) and extra_data fields. Updated ChatMessage model with message_type and extra_data support."
+        - working: true
+          agent: "testing"
+          comment: "Enhanced chat send message API fully functional. Tested all message types: 1) Text messages (message_type='text') working with extra_data=null. 2) Game card messages (message_type='game_card') working with full extra_data validation containing category, winner_id, sender_score, receiver_score, xp_gained fields. 3) Image messages (message_type='image') working with extra_data containing image_base64 field. 4) Invalid message_type validation working - properly rejects invalid types with 400 error. All enhanced message types correctly stored and returned with proper structure."
+
+  - task: "Enhanced Chat Messages Retrieval API"  
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/chat/{user_id}/messages enhanced to return message_type and extra_data fields for all message types."
+        - working: true
+          agent: "testing"
+          comment: "Enhanced messages retrieval API fully functional. All message types correctly returned with message_type and extra_data fields. Text messages have extra_data=null, game_card and image messages have proper extra_data objects. Message structure includes all required fields: id, sender_id, receiver_id, content, message_type, extra_data, read, created_at. Auto-mark as read functionality still working correctly."
+
+  - task: "Enhanced Chat Conversations API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/chat/conversations/{user_id} enhanced with last_message_type field and smart preview text for different message types."
+        - working: true
+          agent: "testing"
+          comment: "Enhanced conversations API fully functional. Includes last_message_type field and enhanced preview text: 1) Image messages show '📷 Image' preview. 2) Game card messages show '🎮 Résultat de match' preview. 3) Text messages show actual content preview. All conversation objects include required fields: partner_id, partner_pseudo, partner_avatar_seed, last_message, last_message_type, last_message_time, is_sender, unread_count. Enhanced preview system working correctly for all message types."
+
 test_plan:
   current_focus:
-    - "Search Themes API"
-    - "Search Players Enhanced API"
-    - "Search Content API"
-    - "Search Trending API"
+    - "Enhanced Chat Send Message API"
+    - "Enhanced Chat Messages Retrieval API"
+    - "Enhanced Chat Conversations API"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -552,5 +596,9 @@ agent_communication:
       message: "🎯 NEW SOCIAL FEATURES BACKEND TESTING COMPLETE - ALL 7 APIs FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications: 1) Player Profile API (GET /api/player/{user_id}/profile?viewer_id=X) - Returns complete public profile with all required fields: pseudo, avatar_seed, selected_title, country, country_flag, matches_played, followers_count, following_count, is_following flag, per-category stats (xp/level/title), champion_titles array, cross-category posts with likes/comments. 2) Player Follow System (POST /api/player/{user_id}/follow) - Toggle functionality working perfectly, self-follow rejected (400), followers count updates correctly. 3) Player Search (GET /api/players/search) - Search by pseudo, category filtering, empty results handled properly. 4) Chat Send (POST /api/chat/send) - Full validation working: empty messages (400), >500 chars (400), self-messages (400). 5) Chat Conversations (GET /api/chat/conversations/{user_id}) - Returns conversations with unread counts, 7-day TTL cleanup working. 6) Chat Messages (GET /api/chat/{user_id}/messages) - Auto-marks as read, proper message structure. 7) Chat Unread Count (GET /api/chat/unread-count/{user_id}) - Accurate counting, updates on read. Full test flow executed: register 2 users → get profile → follow/unfollow → search players → send message → check conversations → fetch messages → check unread counts → validate error cases. ALL NEW SOCIAL FEATURES READY FOR PRODUCTION."
     - agent: "main"
       message: "NEW SEARCH SYSTEM IMPLEMENTATION. Added 4 new backend API endpoints for comprehensive search functionality. Please test ONLY the new search APIs: 1) GET /api/search/themes?q=espace - Should return matching categories (Géographie, Sciences) based on keyword tags. Test with various keywords: 'star wars', 'foot', 'cuisine'. Also test difficulty filter: &difficulty=debutant. Also test with user_id parameter for user-specific data. 2) GET /api/search/players?q=@pseudo - Exact pseudo search. Test also with &title=Téléspectateur to filter by title. Test category filter &category=series_tv. 3) GET /api/search/content?q=test - Search wall posts and comments by content. Should return {posts:[], comments:[]}. 4) GET /api/search/trending - Should return {popular_categories, trending_tags, top_players}. Registration: POST /api/auth/register-guest {pseudo}. Create wall posts first to test content search: POST /api/category/series_tv/wall {user_id, content}. DO NOT retest previously tested APIs."
+    - agent: "main"
+      message: "PREMIUM MESSAGING SYSTEM IMPLEMENTATION. Enhanced chat backend with message types (text, image, game_card). Updated ChatMessage model with message_type and extra_data fields. Please test ONLY the enhanced chat APIs: 1) POST /api/chat/send with message_type='text' - Standard text message. 2) POST /api/chat/send with message_type='game_card' and extra_data containing {category, winner_id, sender_score, receiver_score, xp_gained} - Game card message. 3) POST /api/chat/send with message_type='image' and extra_data containing {image_base64} - Image message. 4) GET /api/chat/{user_id}/messages?with_user=X - Verify response includes message_type and extra_data fields. 5) GET /api/chat/conversations/{user_id} - Verify last_message_type field and preview text shows '📷 Image' for image msgs and '🎮 Résultat de match' for game_card msgs. 6) Validate: message_type must be one of text/image/game_card (test invalid type). Registration: POST /api/auth/register-guest {pseudo}. DO NOT retest search APIs or previously tested APIs."
+    - agent: "testing"
+      message: "💬 ENHANCED MESSAGING SYSTEM BACKEND TESTING COMPLETE - ALL 6 APIS FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications: 1) Text Message API (POST /api/chat/send message_type='text') - Standard text messages working correctly with message_type='text' and extra_data=null. Response includes all required fields: id, sender_id, receiver_id, sender_pseudo, content, message_type, extra_data, read, created_at. 2) Game Card Message API (POST /api/chat/send message_type='game_card') - Game card messages working with full extra_data validation containing category, winner_id, sender_score, receiver_score, xp_gained. All game card fields correctly stored and retrieved. 3) Image Message API (POST /api/chat/send message_type='image') - Image messages working with extra_data containing image_base64 field. Base64 data correctly stored and retrieved. 4) Invalid Message Type Validation - Invalid message_type properly rejected with 400 error as expected. 5) Messages with Types API (GET /api/chat/{user_id}/messages) - All message types correctly returned with message_type and extra_data fields. Text messages have extra_data=null, game_card and image messages have proper extra_data objects. 6) Enhanced Conversations API (GET /api/chat/conversations/{user_id}) - Enhanced preview working correctly: includes last_message_type field, image messages show '📷 Image' preview, game_card messages show '🎮 Résultat de match' preview, text messages show actual content preview. Complete test flow executed: register 2 users → send text message → send game_card message → send image message → validate invalid type → retrieve messages with types → check enhanced conversations. ALL ENHANCED MESSAGING APIS READY FOR PRODUCTION."
     - agent: "testing"
       message: "🔍 NEW SEARCH SYSTEM BACKEND TESTING COMPLETE - ALL 4 APIs FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications: 1) Search Themes API (GET /api/search/themes) - Returns all 8 categories with no query, keyword matching working perfectly (espace→Géographie+Sciences, star wars→Séries TV+Cinéma, foot→Sport). Difficulty filter functional. User-specific data with user_id parameter working. All required fields validated: id, name, description, total_questions, player_count, followers_count, user_level, user_title, is_following, difficulty_label, relevance_score. 2) Search Players API (GET /api/search/players) - @pseudo exact match working, partial search functional, title and category filters working. All required fields validated: id, pseudo, avatar_seed, country, country_flag, total_xp, matches_played, selected_title, best_category, best_level, cat_level, cat_title. 3) Search Content API (GET /api/search/content) - Wall posts and comments search working. Created test post/comment for validation. Response structure {posts:[], comments:[]} correct. Post and comment field validation complete. Empty query returns empty arrays. 4) Search Trending API (GET /api/search/trending) - Returns proper structure: 5 popular categories, 8 trending tags, 5 top players. All field validation complete. ALL NEW SEARCH SYSTEM APIs READY FOR PRODUCTION."

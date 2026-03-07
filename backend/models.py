@@ -169,5 +169,7 @@ class ChatMessage(Base):
     sender_id = Column(String(36), nullable=False, index=True)
     receiver_id = Column(String(36), nullable=False, index=True)
     content = Column(Text, nullable=False)
+    message_type = Column(String(20), default='text')  # text, image, game_card
+    extra_data = Column(JSON, nullable=True)  # For image_url, game_card data, etc.
     read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)

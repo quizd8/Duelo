@@ -1146,6 +1146,8 @@ class ChatSend(BaseModel):
     sender_id: str
     receiver_id: str
     content: str
+    message_type: str = "text"  # text, image, game_card
+    extra_data: Optional[dict] = None  # For image data, game card data
 
 class PlayerSearchRequest(BaseModel):
     query: Optional[str] = None
@@ -1358,18 +1360,23 @@ async def search_players(
 
 @api_router.post("/chat/send")
 async def send_message(data: ChatSend, db: AsyncSession = Depends(get_db)):
-    """Send a chat message."""
-    if not data.content.strip():
-        raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
-    if len(data.content) > 500:
-        raise HTTPException(status_code=400, detail="Message trop long (max 500 caractères)")
+    """Send a chat message (text, image, or game_card)."""
+    if data.message_type == "text":
+        if not data.content.strip():
+            raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
+        if len(data.content) > 500:
+            raise HTTPException(status_code=400, detail="Message trop long (max 500 caractères)")
     if data.sender_id == data.receiver_id:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous envoyer un message")
+    if data.message_type not in ("text", "image", "game_card"):
+        raise HTTPException(status_code=400, detail="Type de message invalide")
 
     msg = ChatMessage(
         sender_id=data.sender_id,
         receiver_id=data.receiver_id,
-        content=data.content.strip(),
+        content=data.content.strip() if data.content else "",
+        message_type=data.message_type,
+        extra_data=data.extra_data,
     )
     db.add(msg)
     await db.commit()
@@ -1385,6 +1392,8 @@ async def send_message(data: ChatSend, db: AsyncSession = Depends(get_db)):
         "receiver_id": msg.receiver_id,
         "sender_pseudo": sender.pseudo if sender else "Inconnu",
         "content": msg.content,
+        "message_type": msg.message_type,
+        "extra_data": msg.extra_data,
         "read": msg.read,
         "created_at": msg.created_at.isoformat(),
     }
@@ -1446,11 +1455,19 @@ async def get_conversations(user_id: str, db: AsyncSession = Depends(get_db)):
         if not partner:
             continue
 
+        # Get last message preview text
+        last_msg_preview = last_msg.content[:100]
+        if last_msg.message_type == "image":
+            last_msg_preview = "📷 Image"
+        elif last_msg.message_type == "game_card":
+            last_msg_preview = "🎮 Résultat de match"
+
         conversations.append({
             "partner_id": pid,
             "partner_pseudo": partner.pseudo,
             "partner_avatar_seed": partner.avatar_seed,
-            "last_message": last_msg.content[:100],
+            "last_message": last_msg_preview,
+            "last_message_type": last_msg.message_type or "text",
             "last_message_time": last_msg.created_at.isoformat(),
             "is_sender": last_msg.sender_id == user_id,
             "unread_count": unread,
@@ -1485,6 +1502,8 @@ async def get_chat_messages(user_id: str, with_user: str, limit: int = 50, db: A
         "sender_id": m.sender_id,
         "receiver_id": m.receiver_id,
         "content": m.content,
+        "message_type": m.message_type or "text",
+        "extra_data": m.extra_data,
         "read": m.read,
         "created_at": m.created_at.isoformat(),
     } for m in messages]
