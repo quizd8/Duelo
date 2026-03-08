@@ -100,9 +100,9 @@
     "POST /api/admin/import-questions": "✓ Bulk imports questions with duplicate detection"
   },
   "environment_verification": {
-    "backend_url": "https://duelo-csv-migrate.preview.emergentagent.com (public)",
+    "backend_url": "https://duelo-mobile.preview.emergentagent.com (public)",
     "backend_internal": "http://0.0.0.0:8001",
-    "frontend_url": "https://duelo-csv-migrate.preview.emergentagent.com",
+    "frontend_url": "https://duelo-mobile.preview.emergentagent.com",
     "database": "Supabase PostgreSQL (connection verified)",
     "backend_logs": "No errors, uvicorn running correctly",
     "frontend_logs": "Expo Metro bundler running, tunnel connected, minor React Native web deprecation warnings (non-blocking)"

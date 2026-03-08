@@ -12,14 +12,20 @@ function useCosmicBackground() {
     const style = document.createElement('style');
     style.id = 'duelo-cosmic-bg';
     style.textContent = `
-      html, body, #root {
+      html, body {
+        margin: 0;
+        padding: 0;
         background: #050510 url('${bgUrl}') center/cover fixed no-repeat !important;
       }
+      #root,
       #root > div,
       #root > div > div,
       #root > div > div > div,
-      #root > div > div > div > div {
-        background-color: transparent !important;
+      #root > div > div > div > div,
+      #root > div > div > div > div > div,
+      #root > div > div > div > div > div > div,
+      #root > div > div > div > div > div > div > div {
+        background: #050510 url('${bgUrl}') center/cover fixed no-repeat !important;
       }
       body::before {
         content: '';
@@ -44,7 +50,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: 'transparent' },
+          contentStyle: { backgroundColor: '#050510' },
           animation: 'slide_from_right',
           animationDuration: 300,
         }}
@@ -56,6 +62,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#050510',
   },
 });

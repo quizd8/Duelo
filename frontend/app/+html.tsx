@@ -14,19 +14,21 @@ export default function Root({ children }: { children: React.ReactNode }) {
         />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: `
-          html, body, #root {
-            background: #050510 !important;
-            background-image: url('${API_URL}/api/static/fond_duelo.webp') !important;
-            background-size: cover !important;
-            background-position: center !important;
-            background-attachment: fixed !important;
-            background-repeat: no-repeat !important;
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #050510 url('${API_URL}/api/static/fond_duelo.webp') center/cover fixed no-repeat !important;
           }
-          /* Remove any opaque backgrounds from Expo Router wrappers */
-          #root > div > div {
-            background-color: transparent !important;
+          #root,
+          #root > div,
+          #root > div > div,
+          #root > div > div > div,
+          #root > div > div > div > div,
+          #root > div > div > div > div > div,
+          #root > div > div > div > div > div > div,
+          #root > div > div > div > div > div > div > div {
+            background: #050510 url('${API_URL}/api/static/fond_duelo.webp') center/cover fixed no-repeat !important;
           }
-          /* Subtle overlay for readability */
           body::before {
             content: '';
             position: fixed;

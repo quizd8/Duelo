@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 # Backend URL configuration
-BACKEND_URL = "https://duelo-csv-migrate.preview.emergentagent.com/api"
+BACKEND_URL = "https://duelo-mobile.preview.emergentagent.com/api"
 
 class NotificationsTestSuite:
     def __init__(self):
