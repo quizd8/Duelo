@@ -10,24 +10,26 @@ import * as Haptics from 'expo-haptics';
 import DueloHeader from '../../components/DueloHeader';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-
 const GRID_PAD = 16;
 
-const CATEGORY_META: Record<string, { icon: string; name: string; color: string; bg: string }> = {
-  series_tv: { icon: '📺', name: 'Séries TV', color: '#E040FB', bg: '#2D1B4E' },
-  geographie: { icon: '🌍', name: 'Géographie', color: '#00FFFF', bg: '#0D2B2B' },
-  histoire: { icon: '🏛️', name: 'Histoire', color: '#FFD700', bg: '#2B2510' },
-  cinema: { icon: '🎬', name: 'Cinéma', color: '#FF6B6B', bg: '#2B1515' },
-  sport: { icon: '⚽', name: 'Sport', color: '#00FF9D', bg: '#0D2B1A' },
-  musique: { icon: '🎵', name: 'Musique', color: '#FF8C00', bg: '#2B1E0D' },
-  sciences: { icon: '🔬', name: 'Sciences', color: '#7B68EE', bg: '#1A1533' },
-  gastronomie: { icon: '🍽️', name: 'Gastronomie', color: '#FF69B4', bg: '#2B152B' },
+type ThemeData = {
+  id: string;
+  name: string;
+  super_category: string;
+  cluster: string;
+  color_hex: string;
+  icon_url: string;
+  xp: number;
+  level: number;
+  title: string;
+  xp_progress: { current: number; needed: number; progress: number };
 };
 
-type CategoryData = {
-  xp: number; level: number; title: string;
-  xp_progress: { current: number; needed: number; progress: number };
-  unlocked_titles: { level: number; title: string }[];
+type UnlockedTitle = {
+  level: number;
+  title: string;
+  theme_id: string;
+  theme_name: string;
 };
 
 type ProfileData = {
@@ -35,13 +37,13 @@ type ProfileData = {
     id: string; pseudo: string; avatar_seed: string; is_guest: boolean;
     total_xp: number; selected_title: string | null;
     country: string | null; country_flag: string;
-    categories: Record<string, CategoryData>;
     matches_played: number; matches_won: number;
     best_streak: number; current_streak: number; streak_badge: string;
-    win_rate: number; mmr: number;
+    win_rate: number;
     followers_count: number; following_count: number;
   };
-  all_unlocked_titles: { level: number; title: string; category: string }[];
+  themes: ThemeData[];
+  all_unlocked_titles: UnlockedTitle[];
   match_history: Array<{
     id: string; category: string; player_score: number; opponent_score: number;
     opponent: string; won: boolean; xp_earned: number;
@@ -62,7 +64,7 @@ export default function ProfileScreen() {
     const userId = await AsyncStorage.getItem('duelo_user_id');
     if (!userId) { setLoading(false); return; }
     try {
-      const res = await fetch(`${API_URL}/api/profile/${userId}`);
+      const res = await fetch(`${API_URL}/api/profile-v2/${userId}`);
       const data = await res.json();
       setProfile(data);
     } catch {}
@@ -107,12 +109,8 @@ export default function ProfileScreen() {
     );
   }
 
-  const { user, all_unlocked_titles, match_history } = profile;
-  const displayTitle = user.selected_title || all_unlocked_titles[0]?.title || '';
-
-  // Sort categories by level descending
-  const sortedCategories = Object.entries(user.categories)
-    .sort((a, b) => b[1].level - a[1].level || b[1].xp - a[1].xp);
+  const { user, themes, all_unlocked_titles, match_history } = profile;
+  const displayTitle = user.selected_title || (all_unlocked_titles && all_unlocked_titles.length > 0 ? all_unlocked_titles[0].title : '');
 
   return (
     <SafeAreaView style={s.container}>
@@ -171,38 +169,40 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── Mes Thèmes Grid (4 per row) ── */}
-        <Text style={s.sectionTitle}>MES THÈMES</Text>
-        <View style={s.topicsGrid}>
-          {sortedCategories.map(([catKey, catData]) => {
-            const meta = CATEGORY_META[catKey] || { icon: '?', name: catKey, color: '#8A2BE2', bg: '#1A1A2E' };
-            const isUnplayed = catData.level === 0;
-            return (
-              <TouchableOpacity
-                key={catKey}
-                style={s.topicCard}
-                onPress={() => router.push(`/category-detail?id=${catKey}`)}
-                activeOpacity={0.8}
-              >
-                <View style={[s.topicCardInner, { backgroundColor: isUnplayed ? '#111' : meta.bg }]}>
-                  <View style={[s.topicIconBox, { backgroundColor: meta.color + (isUnplayed ? '15' : '25') }]}>
-                    <Text style={[s.topicIcon, isUnplayed && { opacity: 0.4 }]}>{meta.icon}</Text>
-                  </View>
-                  <Text style={[s.topicName, { color: isUnplayed ? '#525252' : meta.color }]}>{meta.name}</Text>
-                  <Text style={[s.topicLevel, isUnplayed && { color: '#333' }]}>
-                    {isUnplayed ? 'Niv. 0' : `Niv. ${catData.level}`}
-                  </Text>
-                  {/* XP progress mini bar */}
-                  {!isUnplayed && (
-                    <View style={s.topicBarBg}>
-                      <View style={[s.topicBarFill, { width: `${catData.xp_progress.progress * 100}%`, backgroundColor: meta.color }]} />
+        {/* ── Mes Thèmes (theme-based XP) ── */}
+        {themes && themes.length > 0 && (
+          <>
+            <Text style={s.sectionTitle}>MES THÈMES</Text>
+            <View style={s.topicsGrid}>
+              {themes.map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={s.topicCard}
+                  onPress={() => router.push(`/matchmaking?category=${t.id}&themeName=${encodeURIComponent(t.name)}`)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[s.topicCardInner, { borderColor: t.color_hex + '30' }]}>
+                    <View style={[s.topicIconBox, { backgroundColor: t.color_hex + '20' }]}>
+                      <Text style={s.topicIcon}>{t.name.charAt(0).toUpperCase()}</Text>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                    <Text style={[s.topicName, { color: t.color_hex }]} numberOfLines={1}>{t.name}</Text>
+                    <Text style={s.topicLevel}>Niv. {t.level}</Text>
+                    <View style={s.topicBarBg}>
+                      <View style={[s.topicBarFill, { width: `${(t.xp_progress?.progress || 0) * 100}%`, backgroundColor: t.color_hex }]} />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {themes.length === 0 && (
+          <>
+            <Text style={s.sectionTitle}>MES THÈMES</Text>
+            <Text style={s.noHistory}>Joue un quiz pour commencer à progresser !</Text>
+          </>
+        )}
 
         {/* ── Quick Stats ── */}
         <Text style={s.sectionTitle}>STATISTIQUES</Text>
@@ -220,28 +220,27 @@ export default function ProfileScreen() {
             <Text style={s.qStatLbl}>Best Streak</Text>
           </View>
           <View style={s.qStatBox}>
-            <Text style={[s.qStatVal, { color: '#00FFFF' }]}>{user.total_xp.toLocaleString()}</Text>
+            <Text style={[s.qStatVal, { color: '#00FFFF' }]}>{(user.total_xp || 0).toLocaleString()}</Text>
             <Text style={s.qStatLbl}>XP Total</Text>
           </View>
         </View>
 
         {/* ── Titles ── */}
-        {all_unlocked_titles.length > 0 && (
+        {all_unlocked_titles && all_unlocked_titles.length > 0 && (
           <>
             <Text style={s.sectionTitle}>MES TITRES</Text>
             <View style={s.titlesWrap}>
               {all_unlocked_titles.map((t, i) => {
-                const meta = CATEGORY_META[t.category] || { icon: '?', name: '', color: '#8A2BE2', bg: '#1A1A2E' };
                 const isSelected = user.selected_title === t.title;
                 return (
                   <TouchableOpacity
-                    key={`${t.category}-${t.level}`}
-                    style={[s.titleChip, isSelected && { borderColor: meta.color, backgroundColor: meta.color + '15' }]}
+                    key={`${t.theme_id}-${t.level}`}
+                    style={[s.titleChip, isSelected && { borderColor: '#8A2BE2', backgroundColor: 'rgba(138,43,226,0.15)' }]}
                     onPress={() => handleSelectTitle(t.title)}
                   >
-                    <Text style={s.titleChipIcon}>{meta.icon}</Text>
-                    <Text style={[s.titleChipText, isSelected && { color: meta.color }]}>{t.title}</Text>
-                    {isSelected && <Text style={[s.titleChipCheck, { color: meta.color }]}>✓</Text>}
+                    <Text style={s.titleChipText}>{t.theme_name}</Text>
+                    <Text style={[s.titleChipTitle, isSelected && { color: '#B57EDC' }]}>{t.title}</Text>
+                    {isSelected && <Text style={s.titleChipCheck}>✓</Text>}
                   </TouchableOpacity>
                 );
               })}
@@ -257,7 +256,9 @@ export default function ProfileScreen() {
           match_history.map((m) => (
             <View key={m.id} style={[s.matchCard, m.won && s.matchCardWon]}>
               <View style={s.matchLeft}>
-                <Text style={s.matchCatIcon}>{CATEGORY_META[m.category]?.icon || '?'}</Text>
+                <View style={s.matchCatBadge}>
+                  <Text style={s.matchCatText}>{m.category}</Text>
+                </View>
                 <View>
                   <Text style={s.matchOpp}>vs {m.opponent}</Text>
                   <Text style={s.matchDate}>{new Date(m.created_at).toLocaleDateString('fr-FR')}</Text>
@@ -319,28 +320,26 @@ export default function ProfileScreen() {
           <View style={s.modalContent}>
             <Text style={s.modalTitle}>Choisir un titre</Text>
             <Text style={s.modalHint}>Ce titre sera affiché sous ton pseudo en duel</Text>
-            {all_unlocked_titles.length === 0 ? (
+            {(!all_unlocked_titles || all_unlocked_titles.length === 0) ? (
               <View style={s.modalEmpty}>
                 <Text style={s.modalEmptyText}>Joue des parties pour débloquer des titres !</Text>
               </View>
             ) : (
               <ScrollView style={s.modalScroll}>
                 {all_unlocked_titles.map((t) => {
-                  const meta = CATEGORY_META[t.category] || { icon: '?', name: '', color: '#8A2BE2', bg: '' };
                   const isSelected = user.selected_title === t.title;
                   return (
                     <TouchableOpacity
-                      key={`${t.category}-${t.level}`}
-                      style={[s.modalItem, isSelected && { borderColor: meta.color, backgroundColor: meta.color + '10' }]}
+                      key={`${t.theme_id}-${t.level}`}
+                      style={[s.modalItem, isSelected && { borderColor: '#8A2BE2', backgroundColor: 'rgba(138,43,226,0.1)' }]}
                       onPress={() => handleSelectTitle(t.title)}
                       disabled={savingTitle}
                     >
-                      <Text style={s.modalItemIcon}>{meta.icon}</Text>
                       <View style={s.modalItemInfo}>
-                        <Text style={[s.modalItemTitle, isSelected && { color: meta.color }]}>{t.title}</Text>
-                        <Text style={s.modalItemSub}>{meta.name} - Niv. {t.level}</Text>
+                        <Text style={[s.modalItemTitle, isSelected && { color: '#B57EDC' }]}>{t.title}</Text>
+                        <Text style={s.modalItemSub}>{t.theme_name} - Niv. {t.level}</Text>
                       </View>
-                      {isSelected && <Text style={[s.modalItemCheck, { color: meta.color }]}>✓</Text>}
+                      {isSelected && <Text style={s.modalItemCheck}>✓</Text>}
                     </TouchableOpacity>
                   );
                 })}
@@ -365,11 +364,10 @@ const s = StyleSheet.create({
   loginBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   scroll: { paddingBottom: 40 },
 
-  /* ── Profile Header (avatar left + info right) ── */
+  /* ── Profile Header ── */
   profileHeader: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: GRID_PAD, paddingVertical: 20,
-    gap: 16,
+    paddingHorizontal: GRID_PAD, paddingVertical: 20, gap: 16,
   },
   avatarContainer: {},
   avatar: {
@@ -380,10 +378,7 @@ const s = StyleSheet.create({
   avatarText: { fontSize: 32, fontWeight: '900', color: '#8A2BE2' },
   profileInfo: { flex: 1 },
   pseudo: { fontSize: 24, fontWeight: '900', color: '#FFF' },
-  titleBadge: {
-    flexDirection: 'row', alignItems: 'center', marginTop: 4,
-    alignSelf: 'flex-start',
-  },
+  titleBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 4, alignSelf: 'flex-start' },
   titleText: { color: '#B57EDC', fontSize: 14, fontWeight: '700' },
   titleTextEmpty: { color: '#525252', fontSize: 14, fontWeight: '600', fontStyle: 'italic' },
   titleEditIcon: { color: '#525252', fontSize: 12 },
@@ -410,24 +405,17 @@ const s = StyleSheet.create({
   },
 
   /* ── Topics Grid ── */
-  topicsGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    paddingHorizontal: GRID_PAD - 5,
-  },
-  topicCard: {
-    width: '25%', padding: 5,
-    alignItems: 'center',
-  },
+  topicsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GRID_PAD - 5 },
+  topicCard: { width: '25%', padding: 5, alignItems: 'center' },
   topicCardInner: {
     width: '100%', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 6,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
+    borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)', alignItems: 'center',
   },
   topicIconBox: {
     width: 44, height: 44, borderRadius: 14,
     justifyContent: 'center', alignItems: 'center', marginBottom: 6,
   },
-  topicIcon: { fontSize: 22 },
+  topicIcon: { fontSize: 22, fontWeight: '900', color: '#FFF' },
   topicName: { fontSize: 10, fontWeight: '800', marginBottom: 2, textAlign: 'center' },
   topicLevel: { fontSize: 9, fontWeight: '700', color: '#A3A3A3', letterSpacing: 0.5, marginBottom: 6 },
   topicBarBg: { width: '80%', height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' },
@@ -449,9 +437,9 @@ const s = StyleSheet.create({
     borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', gap: 6,
   },
-  titleChipIcon: { fontSize: 14 },
-  titleChipText: { color: '#A3A3A3', fontSize: 13, fontWeight: '600' },
-  titleChipCheck: { fontSize: 14, fontWeight: '800' },
+  titleChipText: { color: '#666', fontSize: 10, fontWeight: '600' },
+  titleChipTitle: { color: '#A3A3A3', fontSize: 13, fontWeight: '600' },
+  titleChipCheck: { fontSize: 14, fontWeight: '800', color: '#8A2BE2' },
 
   /* Match History */
   noHistory: { color: '#525252', fontSize: 14, textAlign: 'center', paddingVertical: 20, paddingHorizontal: GRID_PAD },
@@ -462,7 +450,11 @@ const s = StyleSheet.create({
   },
   matchCardWon: { borderColor: 'rgba(0,255,157,0.15)', backgroundColor: 'rgba(0,255,157,0.04)' },
   matchLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  matchCatIcon: { fontSize: 20 },
+  matchCatBadge: {
+    backgroundColor: 'rgba(138,43,226,0.15)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  matchCatText: { color: '#B57EDC', fontSize: 10, fontWeight: '700' },
   matchOpp: { color: '#FFF', fontSize: 14, fontWeight: '600' },
   matchDate: { color: '#525252', fontSize: 11, marginTop: 2 },
   matchRight: { alignItems: 'flex-end' },
@@ -475,16 +467,13 @@ const s = StyleSheet.create({
   resultLoss: { color: '#FF3B30' },
   matchXp: { color: '#00FFFF', fontSize: 10, fontWeight: '700' },
 
-  /* Settings (Paramètres) */
+  /* Settings */
   settingsWrap: {
     marginHorizontal: GRID_PAD, borderRadius: 14, overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-    marginBottom: 24,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 24,
   },
-  settingsRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16,
-  },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
   settingsIcon: { fontSize: 18, marginRight: 12 },
   settingsText: { flex: 1, color: '#E0E0E0', fontSize: 15, fontWeight: '600' },
   settingsArrow: { color: '#525252', fontSize: 22, fontWeight: '300' },
@@ -506,11 +495,10 @@ const s = StyleSheet.create({
     marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  modalItemIcon: { fontSize: 22, marginRight: 12 },
   modalItemInfo: { flex: 1 },
   modalItemTitle: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   modalItemSub: { color: '#525252', fontSize: 11, marginTop: 2 },
-  modalItemCheck: { fontSize: 18, fontWeight: '800' },
+  modalItemCheck: { fontSize: 18, fontWeight: '800', color: '#8A2BE2' },
   modalClose: {
     marginTop: 16, padding: 14, borderRadius: 12, alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.06)',
