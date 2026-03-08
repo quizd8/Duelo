@@ -87,8 +87,8 @@ export default function HomeScreen() {
             onPress={() => handlePress(cat)}
             activeOpacity={0.7}
           >
-            <View style={[styles.superCardInner, { borderColor: cat.color + '30' }]}>
-              <View style={[styles.superCardGlow, { backgroundColor: cat.color + '08' }]} />
+            <View style={[styles.superCardInner]}>
+              <View style={[styles.superCardGlow, { backgroundColor: cat.color + '15' }]} />
               <View style={styles.superCardTop}>
                 <View style={[styles.superIconBox, { backgroundColor: cat.color + '20' }]}>
                   <Text style={styles.superIcon}>{cat.icon}</Text>
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     marginTop: 20, marginBottom: 24, paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontSize: 12, fontWeight: '800', color: '#525252', letterSpacing: 3,
+    fontSize: 12, fontWeight: '800', color: 'rgba(255,255,255,0.7)', letterSpacing: 3,
     marginBottom: 16, paddingHorizontal: 16,
   },
 
@@ -163,8 +163,8 @@ const styles = StyleSheet.create({
   superCardInner: {
     borderRadius: GLASS.radius, padding: 16,
     backgroundColor: GLASS.bg,
-    borderWidth: 1, overflow: 'hidden',
-    borderColor: GLASS.borderCyan,
+    borderWidth: 1.5, overflow: 'hidden',
+    borderColor: GLASS.borderBright,
   },
   superCardGlow: {
     position: 'absolute', top: 0, left: 0, right: 0, height: 60,
@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
   superIcon: { fontSize: 30 },
   superCardInfo: { flex: 1, marginLeft: 14 },
   superLabel: { fontSize: 20, fontWeight: '900', letterSpacing: 2 },
-  superMeta: { color: '#666', fontSize: 13, fontWeight: '600', marginTop: 2 },
-  superChevron: { color: '#444', fontSize: 28, fontWeight: '300' },
+  superMeta: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginTop: 2 },
+  superChevron: { color: 'rgba(255,255,255,0.5)', fontSize: 28, fontWeight: '300' },
 
   // Clusters preview
   clustersPreview: {
@@ -195,8 +195,8 @@ const styles = StyleSheet.create({
     borderColor: GLASS.borderSubtle,
   },
   clusterPillIcon: { fontSize: 14 },
-  clusterPillText: { color: '#AAA', fontSize: 12, fontWeight: '600' },
-  clusterPillCount: { color: '#555', fontSize: 11, fontWeight: '700' },
+  clusterPillText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
+  clusterPillCount: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700' },
 
   // Upcoming
   upcomingGrid: {
