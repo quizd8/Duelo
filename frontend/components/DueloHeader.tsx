@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+// Header icon assets
+const HEADER_ICONS = {
+  search: require('../assets/header/search.png'),
+  message: require('../assets/header/message.png'),
+  notification: require('../assets/header/notification.png'),
+};
 
 export default function DueloHeader() {
   const router = useRouter();
@@ -52,7 +59,7 @@ export default function DueloHeader() {
         }}
         activeOpacity={0.7}
       >
-        <Text style={styles.icon}>🔍</Text>
+        <Image source={HEADER_ICONS.search} style={styles.headerIcon} resizeMode="contain" />
       </TouchableOpacity>
 
       {/* Center: DUELO */}
@@ -68,7 +75,7 @@ export default function DueloHeader() {
           }}
           activeOpacity={0.7}
         >
-          <Text style={styles.icon}>💬</Text>
+          <Image source={HEADER_ICONS.message} style={styles.headerIcon} resizeMode="contain" />
           {unreadCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -83,7 +90,7 @@ export default function DueloHeader() {
           }}
           activeOpacity={0.7}
         >
-          <Text style={styles.icon}>🔔</Text>
+          <Image source={HEADER_ICONS.notification} style={styles.headerIcon} resizeMode="contain" />
           {notifCount > 0 && (
             <View style={styles.notifBadge}>
               <Text style={styles.badgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
@@ -113,7 +120,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
   },
-  icon: { fontSize: 22 },
+  headerIcon: {
+    width: 28,
+    height: 28,
+  },
   logo: {
     fontSize: 22,
     fontWeight: '900',

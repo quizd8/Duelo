@@ -21,7 +21,7 @@ function TabIcon({ label, focused, iconSource }: { label: string; focused: boole
         ]}
         resizeMode="contain"
       />
-      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
+      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]} numberOfLines={1}>{label}</Text>
       {focused && <View style={styles.activeIndicator} />}
     </View>
   );
@@ -102,12 +102,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     elevation: 0,
   },
-  tabItem: { alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
+  tabItem: { alignItems: 'center', justifyContent: 'center', paddingTop: 4, minWidth: 56 },
   tabIconImage: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
   },
-  tabLabel: { fontSize: 10, color: '#525252', marginTop: 3, fontWeight: '600' },
+  tabLabel: { fontSize: 9, color: '#525252', marginTop: 3, fontWeight: '600' },
   tabLabelActive: { color: '#8A2BE2' },
   activeIndicator: {
     width: 4, height: 4, borderRadius: 2,
