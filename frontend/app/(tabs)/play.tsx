@@ -33,7 +33,7 @@ const UPCOMING_CATS = [
   { id: 'STYLE', label: 'Style', icon: '✨', color: '#E040FB' },
 ];
 
-export default function HomeScreen() {
+export default function PlayScreen() {
   const router = useRouter();
   const [superCategories, setSuperCategories] = useState<SuperCategory[]>([]);
   const [loading, setLoading] = useState(true);

@@ -519,7 +519,7 @@ export default function AccueilScreen() {
             activeOpacity={0.85}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-              router.push('/(tabs)/home');
+              router.push('/(tabs)/play');
             }}
           >
             <LinearGradient

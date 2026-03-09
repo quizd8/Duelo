@@ -1,40 +1,57 @@
-# Duelo - Product Requirements Document
+# DUELO - Quiz Compétitif en Temps Réel
 
-## Overview
-Duelo is a competitive real-time quiz mobile app built with Expo (React Native) and FastAPI backend.
+## Description
+Application mobile de quiz compétitif en temps réel construite avec Expo (React Native) + FastAPI + MongoDB.
 
 ## Architecture
-- **Frontend**: Expo (React Native) with Expo Router
-- **Backend**: FastAPI (Python) with SQLAlchemy
-- **Platform**: Cross-platform (iOS, Android, Web)
+- **Frontend**: Expo (React Native) avec expo-router
+- **Backend**: FastAPI (Python)
+- **Database**: MongoDB
+- **Navigation**: Custom tab bar avec 5 onglets (Accueil, Social, Jouer, Thèmes, Profil)
 
-## Completed Work
+## Structure des fichiers clés
+```
+/app
+├── backend/
+│   └── server.py
+└── frontend/
+    ├── app/
+    │   ├── (tabs)/
+    │   │   ├── _layout.tsx    # Tab navigator avec CustomTabBar + unmountOnBlur
+    │   │   ├── accueil.tsx    # Page d'accueil (fil d'activité, duels)
+    │   │   ├── play.tsx       # Page "Jouer" (sélection catégories) - renommé de home.tsx
+    │   │   ├── players.tsx    # Page Social
+    │   │   ├── profile.tsx    # Page Profil
+    │   │   └── themes.tsx     # Page Thèmes
+    │   ├── _layout.tsx
+    │   ├── index.tsx          # Écran de login
+    │   └── +html.tsx
+    ├── assets/
+    │   ├── header/
+    │   └── tabs/
+    ├── components/
+    │   ├── CosmicBackground.tsx
+    │   ├── CustomTabBar.tsx
+    │   ├── DueloHeader.tsx
+    │   └── Header.tsx
+    └── theme/
+        └── glassTheme.ts
+```
 
-### Session 1 - Initial Bug Fixes
-- Fixed page overlap bug on web preview
-- Fixed cosmic background not appearing on all pages
-- Fixed background being overly zoomed on web
-- Fixed profile page crash on Expo Go (null safety)
+## Fonctionnalités implémentées
+- Inscription/connexion invité
+- Navigation par onglets avec icônes personnalisées
+- Page d'accueil avec duels en attente et activité sociale
+- Sélection de catégories de quiz (super catégories)
+- Page profil avec auto-création backend
+- Mur social par catégorie
+- Matchmaking et quiz en temps réel
 
-### Session 2 - Icons & Overlap Fix (March 2026)
-- **Footer icons**: Replaced 5 tab bar icons with custom .webp images (castle, heart, swords, cards, silhouette)
-- **Header icons**: Replaced 4 header icons with custom .webp images (search, DUELO logo, message, notification)  
-- **Footer label**: Corrected "MESSAGE" → "Social"
-- **Custom Tab Bar**: Created fully custom tab bar bypassing React Navigation's dual-rendering system that caused icon brightness issues
-- **Profile page crash**: Backend auto-recreates users that don't exist in DB (prevents 404 → redirect loop)
-- **Page overlap fix (WEB)**: 
-  - Root cause: React Navigation doesn't properly hide inactive tab screens on web
-  - Fix: Removed all transparent background CSS hacks. CosmicBackground now renders its own opaque Image background per screen on web, covering inactive screens
-  - Removed broken `useIsFocused` approach (crashes outside NavigationContainer)
+## Points techniques critiques
+- **`unmountOnBlur: true`** dans `_layout.tsx` : NE PAS MODIFIER (empêche le bug de superposition des pages web)
+- **CustomTabBar** : Toutes les modifications visuelles du tab bar se font dans `CustomTabBar.tsx`
+- **Backend auto-create user** : Le endpoint `/api/profile-v2` crée automatiquement un profil si inexistant
 
-## Key Files
-- `frontend/app/(tabs)/_layout.tsx` - Custom tab bar (bypasses React Navigation icons)
-- `frontend/app/_layout.tsx` - Root stack navigator (clean, no CSS hacks)
-- `frontend/components/CosmicBackground.tsx` - Platform-aware background (Image on web, ImageBackground on native)
-- `frontend/assets/tabs/` - Custom tab icons (.webp)
-- `frontend/assets/header/` - Custom header icons (.webp)
-- `backend/server.py` - FastAPI backend (profile-v2 auto-creates missing users)
-
-## Backlog
-- P2: Review redundancy of accueil.tsx vs home.tsx
-- P3: Verify icon brightness on Expo Go mobile
+## Historique des modifications
+- **09/03/2026** : Renommage `home.tsx` → `play.tsx` pour clarifier le rôle du fichier (page "Jouer")
+- Sessions précédentes : Icônes personnalisées, fix superposition pages, fix boucle profil, fix couleurs icônes inactives

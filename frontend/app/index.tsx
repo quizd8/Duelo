@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
     try {
       const userId = await AsyncStorage.getItem('duelo_user_id');
       if (userId) {
-        router.replace('/(tabs)/home');
+        router.replace('/(tabs)/play');
         return;
       }
     } catch {}
@@ -108,7 +108,7 @@ export default function WelcomeScreen() {
       await AsyncStorage.setItem('duelo_user_id', data.id);
       await AsyncStorage.setItem('duelo_pseudo', data.pseudo);
       await AsyncStorage.setItem('duelo_avatar_seed', data.avatar_seed);
-      router.replace('/(tabs)/home');
+      router.replace('/(tabs)/play');
     } catch (e: any) {
       console.log('Register error:', e?.message);
       setError('Erreur réseau. Vérifiez votre connexion.');

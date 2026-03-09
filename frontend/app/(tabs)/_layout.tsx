@@ -15,7 +15,7 @@ const TAB_ICONS = {
 const TAB_CONFIG = [
   { name: 'accueil', label: 'Accueil', icon: TAB_ICONS.home },
   { name: 'players', label: 'Social', icon: TAB_ICONS.social },
-  { name: 'home', label: 'Jouer', icon: TAB_ICONS.play, isCenter: true },
+  { name: 'play', label: 'Jouer', icon: TAB_ICONS.play, isCenter: true },
   { name: 'themes', label: 'Thèmes', icon: TAB_ICONS.themes },
   { name: 'profile', label: 'Profil', icon: TAB_ICONS.profile },
 ];
@@ -74,7 +74,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="accueil" />
       <Tabs.Screen name="players" />
-      <Tabs.Screen name="home" />
+      <Tabs.Screen name="play" />
       <Tabs.Screen name="themes" />
       <Tabs.Screen name="profile" />
       <Tabs.Screen name="leaderboard" options={{ href: null }} />

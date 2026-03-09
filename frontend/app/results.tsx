@@ -235,7 +235,7 @@ export default function ResultsScreen() {
           <TouchableOpacity testID="play-again-btn" style={styles.playAgainButton} onPress={playAgain} activeOpacity={0.8}>
             <Text style={styles.playAgainText}>⚡ REVANCHE</Text>
           </TouchableOpacity>
-          <TouchableOpacity testID="go-home-btn" style={styles.homeButton} onPress={() => router.replace('/(tabs)/home')}>
+          <TouchableOpacity testID="go-home-btn" style={styles.homeButton} onPress={() => router.replace('/(tabs)/play')}>
             <Text style={styles.homeText}>Retour à l'accueil</Text>
           </TouchableOpacity>
         </Animated.View>
