@@ -3598,12 +3598,16 @@ async def submit_match_v2(request: Request, db: AsyncSession = Depends(get_db)):
 # ── Theme-based Profile ──
 
 @api_router.get("/profile-v2/{user_id}")
-async def get_profile_v2(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_profile_v2(user_id: str, pseudo: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """Profile with theme-based XP system."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        # Auto-recreate user if they have a valid ID but were lost (e.g. DB reset)
+        user = User(id=user_id, pseudo=pseudo or f"Joueur_{user_id[:6]}", is_guest=True)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
 
     # Get all theme XPs for this user
     xp_result = await db.execute(

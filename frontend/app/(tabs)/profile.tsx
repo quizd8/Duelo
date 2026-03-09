@@ -68,7 +68,7 @@ export default function ProfileScreen() {
     const avatarSeed = await AsyncStorage.getItem('duelo_avatar_seed');
     if (!userId) { setLoading(false); return; }
     try {
-      const res = await fetch(`${API_URL}/api/profile-v2/${userId}`);
+      const res = await fetch(`${API_URL}/api/profile-v2/${userId}?pseudo=${encodeURIComponent(pseudo || '')}`);
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
