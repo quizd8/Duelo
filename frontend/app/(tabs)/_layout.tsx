@@ -68,7 +68,8 @@ export default function TabLayout() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: 'transparent' },
+        lazy: true,
+        sceneStyle: { backgroundColor: '#050510' },
       }}
     >
       <Tabs.Screen name="accueil" />

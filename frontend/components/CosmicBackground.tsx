@@ -1,41 +1,43 @@
 import React from 'react';
-import { ImageBackground, StyleSheet, View, Platform } from 'react-native';
+import { Image, StyleSheet, View, Platform, ImageBackground } from 'react-native';
 
 const BG_IMAGE = require('../assets/images/fond_duelo.webp');
 
 export default function CosmicBackground({ children }: { children: React.ReactNode }) {
-  // On web, CSS body background handles the cosmic image
-  if (Platform.OS === 'web') {
+  if (Platform.OS !== 'web') {
     return (
-      <View style={styles.webBg}>
+      <ImageBackground source={BG_IMAGE} style={styles.bg} resizeMode="cover">
+        <View style={styles.overlay} />
         {children}
-      </View>
+      </ImageBackground>
     );
   }
 
-  // On native, use ImageBackground
+  // Web: render background with Image component (no focus hook needed)
   return (
-    <ImageBackground
-      source={BG_IMAGE}
-      style={styles.bg}
-      resizeMode="cover"
-    >
+    <View style={styles.bg}>
+      <Image source={BG_IMAGE} style={styles.bgImage} resizeMode="cover" />
       <View style={styles.overlay} />
-      {children}
-    </ImageBackground>
+      <View style={styles.content}>{children}</View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   bg: {
     flex: 1,
+    backgroundColor: '#050510',
   },
-  webBg: {
-    flex: 1,
-    backgroundColor: 'transparent',
+  bgImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%' as any,
+    height: '100%' as any,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 10, 0.15)',
+  },
+  content: {
+    flex: 1,
   },
 });
