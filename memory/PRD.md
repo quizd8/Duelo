@@ -24,10 +24,10 @@ Application mobile de quiz compétitif en temps réel construite avec Expo (Reac
     │   │   ├── profile.tsx    # Page Profil
     │   │   └── themes.tsx     # Page Thèmes
     │   ├── _layout.tsx
-    │   ├── index.tsx          # Écran de login
+    │   ├── index.tsx          # Écran de login (redesigné)
     │   └── +html.tsx
     ├── assets/
-    │   ├── header/
+    │   ├── header/            # duelo_logo.webp, search.webp, message.webp, notification.webp
     │   └── tabs/
     ├── components/
     │   ├── CosmicBackground.tsx
@@ -53,5 +53,6 @@ Application mobile de quiz compétitif en temps réel construite avec Expo (Reac
 - **Backend auto-create user** : Le endpoint `/api/profile-v2` crée automatiquement un profil si inexistant
 
 ## Historique des modifications
+- **09/03/2026** : Redesign page d'accueil (index.tsx) - Logo Duelo, tagline neon-glow pill, suppression icône éclair et footer
 - **09/03/2026** : Renommage `home.tsx` → `play.tsx` pour clarifier le rôle du fichier (page "Jouer")
 - Sessions précédentes : Icônes personnalisées, fix superposition pages, fix boucle profil, fix couleurs icônes inactives

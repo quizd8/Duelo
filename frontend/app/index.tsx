@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Animated,
-  KeyboardAvoidingView, Platform, Keyboard, ActivityIndicator, Dimensions
+  KeyboardAvoidingView, Platform, Keyboard, ActivityIndicator, Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,6 +12,7 @@ import { GLASS } from '../theme/glassTheme';
 
 const { width } = Dimensions.get('window');
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const DUELO_LOGO = require('../assets/header/duelo_logo.webp');
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -132,14 +134,14 @@ export default function WelcomeScreen() {
       >
         <TouchableOpacity activeOpacity={1} onPress={Keyboard.dismiss} style={styles.inner}>
           <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ scale: pulseAnim }] }]}>
-            <View style={styles.logoContainer}>
-              <Text style={styles.logoIcon}>⚡</Text>
-              <View style={styles.logoBadge}>
-                <Text style={styles.logoBadgeText}>VS</Text>
-              </View>
-            </View>
-            <Text style={styles.title}>DUELO</Text>
-            <Text style={styles.subtitle}>Quiz Compétitif en Temps Réel</Text>
+            <Image source={DUELO_LOGO} style={styles.logoImage} resizeMode="contain" />
+          </Animated.View>
+
+          {/* Tagline pill */}
+          <Animated.View style={[styles.taglinePill, { opacity: fadeAnim }]}>
+            <Text style={styles.taglineText}>
+              Joues à plus de 500 thèmes !{'\n'}Deviens le top 1 autour de chez toi !
+            </Text>
           </Animated.View>
 
           <Animated.View style={[styles.formContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -194,10 +196,6 @@ export default function WelcomeScreen() {
               
             </View>
           </Animated.View>
-
-          <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
-            <Text style={styles.footerText}>30 questions • 3 catégories • ∞ fun</Text>
-          </Animated.View>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -209,18 +207,36 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' },
   keyboardView: { flex: 1 },
   inner: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: 40 },
-  logoContainer: {
-    width: 80, height: 80, borderRadius: 20,
-    backgroundColor: GLASS.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 16,
-    borderWidth: 1.5, borderColor: GLASS.borderCyan,
-    shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 20, elevation: 10,
+  header: { alignItems: 'center', marginBottom: 20 },
+  logoImage: {
+    width: 220,
+    height: 56,
   },
-  logoIcon: { fontSize: 36 },
-  logoBadge: { position: 'absolute', bottom: -6, right: -6, backgroundColor: '#00FFFF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
-  logoBadgeText: { color: '#000', fontSize: 10, fontWeight: '900' },
-  title: { fontSize: 48, fontWeight: '900', color: '#FFF', letterSpacing: 8, textShadowColor: 'rgba(0,255,255,0.5)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4, letterSpacing: 2, textTransform: 'uppercase' },
+  taglinePill: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,255,255,0.35)',
+    marginBottom: 32,
+    ...Platform.select({
+      web: { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } as any,
+      default: {},
+    }),
+  },
+  taglineText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 20,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(255,255,255,0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
   formContainer: { marginBottom: 32 },
   glassCard: {
     backgroundColor: GLASS.bg,
@@ -267,11 +283,4 @@ const styles = StyleSheet.create({
   },
   playButtonDisabled: { opacity: 0.4 },
   playButtonText: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 2 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: GLASS.borderSubtle },
-  dividerText: { color: 'rgba(255,255,255,0.4)', marginHorizontal: 12, fontSize: 12 },
-  adminButton: { borderWidth: 1, borderColor: GLASS.borderSubtle, borderRadius: GLASS.radiusSm, padding: 14, alignItems: 'center' },
-  adminButtonText: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '600' },
-  footer: { alignItems: 'center', paddingBottom: 20 },
-  footerText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, letterSpacing: 1 },
 });
