@@ -1,10 +1,20 @@
-import { Tabs, useRouter } from 'expo-router';
-import { View, Text, Image, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { View, Text, Image, StyleSheet, Platform, TouchableOpacity, Dimensions, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { runOnJS } from 'react-native-reanimated';
-import { useRef, useCallback } from 'react';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSpring, withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import { useRouter, usePathname, Slot } from 'expo-router';
 import { GLASS } from '../../theme/glassTheme';
+
+// Import screen components directly for the pager
+import AccueilScreen from './accueil';
+import PlayersScreen from './players';
+import PlayScreen from './play';
+import ThemesScreen from './themes';
+import ProfileScreen from './profile';
 
 // Tab icon assets
 const TAB_ICONS = {
@@ -24,29 +34,22 @@ const TAB_CONFIG = [
 ];
 
 const TAB_NAMES = TAB_CONFIG.map(t => t.name);
+const TAB_COUNT = TAB_CONFIG.length;
+const SCREENS = [AccueilScreen, PlayersScreen, PlayScreen, ThemesScreen, ProfileScreen];
 
-function CustomTabBar({ state, navigation }: any) {
+const SPRING_CONFIG = { damping: 22, stiffness: 220, mass: 0.8 };
+
+function CustomTabBar({ currentIndex, onTabPress }: { currentIndex: number; onTabPress: (index: number) => void }) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.tabBar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 8 }]}>
       {TAB_CONFIG.map((tab, index) => {
-        const isFocused = state.index === index;
-
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: state.routes[index]?.key,
-            canPreventDefault: true,
-          });
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(state.routes[index]?.name);
-          }
-        };
+        const isFocused = currentIndex === index;
 
         if (tab.isCenter) {
           return (
-            <TouchableOpacity key={tab.name} style={styles.playTabWrap} onPress={onPress} activeOpacity={1}>
+            <TouchableOpacity key={tab.name} style={styles.playTabWrap} onPress={() => onTabPress(index)} activeOpacity={1}>
               <View style={[styles.playTabCircle, isFocused && styles.playTabCircleActive]}>
                 <Image source={tab.icon} style={styles.playTabIconImage} resizeMode="contain" />
               </View>
@@ -56,7 +59,7 @@ function CustomTabBar({ state, navigation }: any) {
         }
 
         return (
-          <TouchableOpacity key={tab.name} style={styles.tabItem} onPress={onPress} activeOpacity={1}>
+          <TouchableOpacity key={tab.name} style={styles.tabItem} onPress={() => onTabPress(index)} activeOpacity={1}>
             <Image source={tab.icon} style={styles.tabIconImage} resizeMode="contain" />
             <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>{tab.label}</Text>
             {isFocused && <View style={styles.activeIndicator} />}
@@ -68,66 +71,147 @@ function CustomTabBar({ state, navigation }: any) {
 }
 
 export default function TabLayout() {
-  const router = useRouter();
-  const currentIndexRef = useRef(0);
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const translateX = useSharedValue(0);
+  const currentIndex = useSharedValue(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set([0, 1]));
 
-  const handleSwipe = useCallback((direction: 'left' | 'right') => {
-    const idx = currentIndexRef.current;
-    if (direction === 'left' && idx < TAB_NAMES.length - 1) {
-      const nextTab = TAB_NAMES[idx + 1];
-      router.navigate(`/(tabs)/${nextTab}` as any);
-    } else if (direction === 'right' && idx > 0) {
-      const prevTab = TAB_NAMES[idx - 1];
-      router.navigate(`/(tabs)/${prevTab}` as any);
+  // Pre-render adjacent pages when active index changes
+  useEffect(() => {
+    setRenderedPages(prev => {
+      const next = new Set(prev);
+      next.add(activeIndex);
+      if (activeIndex > 0) next.add(activeIndex - 1);
+      if (activeIndex < TAB_COUNT - 1) next.add(activeIndex + 1);
+      return next;
+    });
+  }, [activeIndex]);
+
+  // Handle external navigation (e.g., from results screen back to a tab)
+  const pathname = usePathname();
+  const lastSyncedPath = useRef('');
+
+  useEffect(() => {
+    if (!pathname) return;
+    const tabName = pathname.split('/').pop();
+    if (!tabName || tabName === lastSyncedPath.current) return;
+    const idx = TAB_NAMES.indexOf(tabName);
+    if (idx >= 0 && idx !== activeIndex) {
+      lastSyncedPath.current = tabName;
+      currentIndex.value = idx;
+      translateX.value = -idx * SCREEN_WIDTH;
+      setActiveIndex(idx);
     }
-  }, [router]);
+  }, [pathname, SCREEN_WIDTH]);
 
-  const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-40, 40])
+  const updateActiveIndex = useCallback((idx: number) => {
+    setActiveIndex(idx);
+    lastSyncedPath.current = TAB_NAMES[idx];
+  }, []);
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-30, 30])
     .failOffsetY([-15, 15])
-    .onEnd((event) => {
+    .onUpdate((e) => {
       'worklet';
-      const isHorizontal = Math.abs(event.translationX) > Math.abs(event.translationY) * 1.5;
-      const hasEnoughDistance = Math.abs(event.translationX) > 60;
-      const hasEnoughVelocity = Math.abs(event.velocityX) > 300;
+      const rawTranslate = -currentIndex.value * SCREEN_WIDTH + e.translationX;
+      const maxTranslate = 0;
+      const minTranslate = -(TAB_COUNT - 1) * SCREEN_WIDTH;
 
-      if (isHorizontal && (hasEnoughDistance || hasEnoughVelocity)) {
-        if (event.translationX < 0) {
-          runOnJS(handleSwipe)('left');
-        } else {
-          runOnJS(handleSwipe)('right');
+      // Rubber band effect at edges
+      if (rawTranslate > maxTranslate) {
+        translateX.value = rawTranslate * 0.25;
+      } else if (rawTranslate < minTranslate) {
+        translateX.value = minTranslate + (rawTranslate - minTranslate) * 0.25;
+      } else {
+        translateX.value = rawTranslate;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      const curPage = currentIndex.value;
+      let newPage = curPage;
+
+      const threshold = SCREEN_WIDTH / 3;
+      const isHorizontal = Math.abs(e.translationX) > Math.abs(e.translationY) * 1.2;
+
+      if (isHorizontal) {
+        if (e.translationX < -threshold || (e.translationX < -30 && e.velocityX < -500)) {
+          newPage = Math.min(curPage + 1, TAB_COUNT - 1);
+        } else if (e.translationX > threshold || (e.translationX > 30 && e.velocityX > 500)) {
+          newPage = Math.max(curPage - 1, 0);
         }
       }
+
+      currentIndex.value = newPage;
+      translateX.value = withSpring(-newPage * SCREEN_WIDTH, SPRING_CONFIG);
+      runOnJS(updateActiveIndex)(newPage);
     });
 
+  const containerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const onTabPress = useCallback((index: number) => {
+    currentIndex.value = index;
+    translateX.value = withTiming(-index * SCREEN_WIDTH, { duration: 300 });
+    setActiveIndex(index);
+    lastSyncedPath.current = TAB_NAMES[index];
+  }, [SCREEN_WIDTH]);
+
   return (
-    <GestureDetector gesture={swipeGesture}>
-      <Animated.View style={{ flex: 1 }}>
-        <Tabs
-          tabBar={(props) => {
-            // Track current index for swipe handler
-            currentIndexRef.current = props.state.index;
-            return <CustomTabBar {...props} />;
-          }}
-          screenOptions={{
-            headerShown: false,
-            lazy: true,
-            sceneStyle: { backgroundColor: '#050510' },
-          }}
-        >
-          <Tabs.Screen name="accueil" />
-          <Tabs.Screen name="players" />
-          <Tabs.Screen name="play" />
-          <Tabs.Screen name="themes" />
-          <Tabs.Screen name="profile" />
-          <Tabs.Screen name="leaderboard" options={{ href: null }} />
-        </Tabs>
-      </Animated.View>
-    </GestureDetector>
+    <View style={styles.container}>
+      {/* Hidden Slot for expo-router compatibility */}
+      <View style={styles.hiddenSlot} pointerEvents="none">
+        <Slot />
+      </View>
+
+      {/* Custom swipeable pager */}
+      <View style={styles.pagerContainer}>
+        <GestureDetector gesture={panGesture}>
+          <Animated.View style={[styles.pagerStrip, containerStyle]}>
+            {SCREENS.map((ScreenComponent, idx) => (
+              <View key={idx} style={[styles.page, { width: SCREEN_WIDTH }]}>
+                {renderedPages.has(idx) ? <ScreenComponent /> : <View style={styles.placeholder} />}
+              </View>
+            ))}
+          </Animated.View>
+        </GestureDetector>
+      </View>
+
+      <CustomTabBar currentIndex={activeIndex} onTabPress={onTabPress} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#050510',
+  },
+  hiddenSlot: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
+  },
+  pagerContainer: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  pagerStrip: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  page: {
+    overflow: 'hidden',
+  },
+  placeholder: {
+    flex: 1,
+    backgroundColor: '#050510',
+  },
   tabBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',

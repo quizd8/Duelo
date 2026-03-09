@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 # Backend URL configuration
-BACKEND_URL = "https://profile-fixes-4.preview.emergentagent.com/api"
+BACKEND_URL = "https://swipe-quiz-battle.preview.emergentagent.com/api"
 
 class NotificationsTestSuite:
     def __init__(self):

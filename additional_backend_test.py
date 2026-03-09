@@ -8,7 +8,7 @@ import aiohttp
 import json
 import time
 
-BASE_URL = "https://profile-fixes-4.preview.emergentagent.com/api"
+BASE_URL = "https://swipe-quiz-battle.preview.emergentagent.com/api"
 
 async def test_xp_edge_cases():
     """Test XP calculation with edge cases and verify streak bonuses."""
