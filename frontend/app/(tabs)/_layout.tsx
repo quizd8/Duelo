@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { View, Text, Image, StyleSheet, Platform } from 'react-native';
+import { View, Text, Image, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { GLASS } from '../../theme/glassTheme';
 
 // Tab icon assets
@@ -48,7 +48,15 @@ export default function TabLayout() {
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: false,
         tabBarActiveTintColor: '#00FFFF',
-        tabBarInactiveTintColor: '#525252',
+        tabBarInactiveTintColor: '#00FFFF',
+        tabBarItemStyle: { opacity: 1 },
+        tabBarButton: (props) => (
+          <TouchableOpacity
+            {...props}
+            activeOpacity={1}
+            style={[props.style, { opacity: 1 }]}
+          />
+        ),
         sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
