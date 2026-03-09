@@ -1,10 +1,11 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function RootLayout() {
   return (
-    <View style={styles.root}>
+    <GestureHandlerRootView style={styles.root}>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -14,7 +15,7 @@ export default function RootLayout() {
           animationDuration: 300,
         }}
       />
-    </View>
+    </GestureHandlerRootView>
   );
 }
 

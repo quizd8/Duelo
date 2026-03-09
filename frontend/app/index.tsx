@@ -244,7 +244,7 @@ export default function WelcomeScreen() {
               <Animated.View style={[
                 styles.header,
                 {
-                  opacity: Animated.multiply(fadeAnim, logoOpacity),
+                  opacity: fadeAnim,
                   transform: [
                     { scale: logoScale },
                     { translateY: logoFloat },
