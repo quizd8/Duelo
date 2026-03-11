@@ -16,6 +16,7 @@ import { useSwipeBackProgress } from './SwipeBackContext';
 
 const SPRING_CONFIG = { damping: 22, stiffness: 220, mass: 0.8 };
 const SWIPE_THRESHOLD_RATIO = 0.3;
+const IS_WEB = Platform.OS === 'web';
 
 interface SwipeBackPageProps {
   children: React.ReactNode;
@@ -24,14 +25,18 @@ interface SwipeBackPageProps {
 export default function SwipeBackPage({ children }: SwipeBackPageProps) {
   const router = useRouter();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const translateX = useSharedValue(SCREEN_WIDTH);
+  // On web: start off-screen for custom entry animation
+  // On native: start at 0, native stack handles entry animation
+  const translateX = useSharedValue(IS_WEB ? SCREEN_WIDTH : 0);
   const parallaxProgress = useSwipeBackProgress();
   const hasTriggeredHaptic = useSharedValue(false);
 
-  // Entry animation + parallax activation
-  // progress: 0 = no effect (tabs normal), 1 = page fully covering (tabs shifted)
   useEffect(() => {
-    translateX.value = withTiming(0, { duration: 300 });
+    if (IS_WEB) {
+      // Web: custom slide-in animation
+      translateX.value = withTiming(0, { duration: 300 });
+    }
+    // Activate parallax (1 = page covering tabs)
     if (parallaxProgress) {
       parallaxProgress.value = withTiming(1, { duration: 300 });
     }
@@ -43,7 +48,9 @@ export default function SwipeBackPage({ children }: SwipeBackPageProps) {
   }, []);
 
   const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!IS_WEB) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   };
 
   const goBack = () => {
@@ -51,9 +58,10 @@ export default function SwipeBackPage({ children }: SwipeBackPageProps) {
   };
 
   const panGesture = Gesture.Pan()
-    .activeOffsetX(20)
-    .failOffsetX(-10)
-    .failOffsetY([-15, 15])
+    // Touch-friendly thresholds (more tolerant for finger input)
+    .activeOffsetX(IS_WEB ? 20 : 15)
+    .failOffsetX(IS_WEB ? -10 : -20)
+    .failOffsetY(IS_WEB ? [-15, 15] : [-25, 25])
     .onStart(() => {
       'worklet';
       hasTriggeredHaptic.value = false;
@@ -94,7 +102,7 @@ export default function SwipeBackPage({ children }: SwipeBackPageProps) {
           parallaxProgress.value = withTiming(0, { duration: 220 });
         }
       } else {
-        // Swipe cancelled - back to covering
+        // Swipe cancelled
         translateX.value = withSpring(0, SPRING_CONFIG);
         if (parallaxProgress) {
           parallaxProgress.value = withSpring(1, SPRING_CONFIG);

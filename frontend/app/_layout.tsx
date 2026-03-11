@@ -13,12 +13,14 @@ const SWIPEABLE_SCREENS = [
   'super-category', 'notification-settings',
 ];
 
+// Platform-specific options for swipeable screens
 const swipeableScreenOptions = {
   headerShown: false,
-  presentation: 'containedTransparentModal' as const,
-  animation: 'none' as const,
+  presentation: 'transparentModal' as const,
+  // On native: use native slide animation for entry; on web: SwipeBackPage handles it
+  animation: Platform.OS === 'web' ? ('none' as const) : ('slide_from_right' as const),
   contentStyle: { backgroundColor: 'transparent' },
-  gestureEnabled: false,
+  gestureEnabled: false, // We handle gestures ourselves via SwipeBackPage
 };
 
 export default function RootLayout() {
