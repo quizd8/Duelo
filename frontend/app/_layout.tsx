@@ -38,6 +38,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="admin" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
           {SWIPEABLE_SCREENS.map((name) => (
             <Stack.Screen key={name} name={name} options={swipeableScreenOptions} />
           ))}

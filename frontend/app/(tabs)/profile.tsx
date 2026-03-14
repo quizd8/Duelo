@@ -340,6 +340,12 @@ export default function ProfileScreen() {
             <Text style={s.settingsArrow}>›</Text>
           </TouchableOpacity>
           <View style={s.settingsDivider} />
+          <TouchableOpacity style={s.settingsRow} onPress={() => router.push('/admin')}>
+            <Text style={s.settingsIcon}>⚙️</Text>
+            <Text style={s.settingsText}>Administration</Text>
+            <Text style={s.settingsArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={s.settingsDivider} />
           <TouchableOpacity style={[s.settingsRow]} onPress={handleLogout} activeOpacity={0.7}>
             <Text style={s.settingsIcon}>🚪</Text>
             <Text style={[s.settingsText, { color: '#FF3B30' }]}>Se déconnecter</Text>

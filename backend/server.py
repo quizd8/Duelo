@@ -3125,6 +3125,166 @@ async def import_csv_data(request: Request, db: AsyncSession = Depends(get_db)):
     }
 
 
+# ── CSV Upload Import (New clean endpoint) ──
+
+class CSVQuestionRow(BaseModel):
+    id: Optional[str] = None
+    category: str
+    question_text: str
+    option_a: str
+    option_b: str
+    option_c: str
+    option_d: str
+    correct_option: str  # "A", "B", "C", "D"
+    difficulty: Optional[str] = "medium"
+    angle: Optional[str] = ""
+    batch: Optional[str] = ""
+
+class CSVUploadRequest(BaseModel):
+    password: str
+    questions: List[dict]
+
+CORRECT_OPTION_MAP = {"A": 0, "B": 1, "C": 2, "D": 3}
+
+@api_router.post("/admin/upload-csv")
+async def upload_csv_questions(data: CSVUploadRequest, db: AsyncSession = Depends(get_db)):
+    """Import questions from parsed CSV data (parsed client-side with PapaParse).
+    Each row should have: id, category, question_text, option_a, option_b, option_c, option_d, correct_option, difficulty, angle, batch.
+    correct_option should be A, B, C or D.
+    """
+    # Verify admin password
+    if data.password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Mot de passe administrateur incorrect")
+
+    imported = 0
+    duplicates = 0
+    errors = []
+
+    for i, row in enumerate(data.questions):
+        try:
+            q_id = str(row.get("id", "")).strip()
+            category = str(row.get("category", "")).strip()
+            question_text = str(row.get("question_text", "")).strip()
+            opt_a = str(row.get("option_a", "")).strip()
+            opt_b = str(row.get("option_b", "")).strip()
+            opt_c = str(row.get("option_c", "")).strip()
+            opt_d = str(row.get("option_d", "")).strip()
+            correct_str = str(row.get("correct_option", "")).strip().upper()
+            difficulty = str(row.get("difficulty", "medium")).strip() or "medium"
+            angle = str(row.get("angle", "")).strip()
+            batch = str(row.get("batch", "")).strip()
+
+            # Validate required fields
+            if not question_text:
+                errors.append(f"Ligne {i+1}: question_text manquant")
+                continue
+            if not category:
+                errors.append(f"Ligne {i+1}: category manquant")
+                continue
+            if not opt_a or not opt_b or not opt_c or not opt_d:
+                errors.append(f"Ligne {i+1}: une ou plusieurs options manquantes")
+                continue
+            if correct_str not in CORRECT_OPTION_MAP:
+                errors.append(f"Ligne {i+1}: correct_option invalide '{correct_str}' (attendu: A, B, C ou D)")
+                continue
+
+            correct_int = CORRECT_OPTION_MAP[correct_str]
+            options_json = [opt_a, opt_b, opt_c, opt_d]
+
+            # Generate ID if not provided
+            if not q_id:
+                q_id = generate_uuid()
+
+            # Check duplicate by ID
+            existing = await db.execute(select(Question).where(Question.id == q_id))
+            if existing.scalar_one_or_none():
+                duplicates += 1
+                continue
+
+            question = Question(
+                id=q_id,
+                category=category,
+                question_text=question_text,
+                options=options_json,
+                correct_option=correct_int,
+                difficulty=difficulty,
+                option_a=opt_a,
+                option_b=opt_b,
+                option_c=opt_c,
+                option_d=opt_d,
+                angle=angle,
+                batch=batch,
+            )
+            db.add(question)
+            imported += 1
+
+            # Commit in batches of 200
+            if imported % 200 == 0:
+                await db.commit()
+
+        except Exception as e:
+            errors.append(f"Ligne {i+1}: {str(e)}")
+
+    await db.commit()
+
+    # Update question counts per theme
+    try:
+        result = await db.execute(select(Theme))
+        themes_list = result.scalars().all()
+        for t in themes_list:
+            count_res = await db.execute(
+                select(func.count(Question.id)).where(Question.category == t.id)
+            )
+            t.question_count = count_res.scalar() or 0
+        await db.commit()
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "imported": imported,
+        "duplicates": duplicates,
+        "errors": errors[:50],  # Limit error list to 50
+        "total_processed": len(data.questions),
+    }
+
+
+@api_router.get("/admin/questions-stats")
+async def get_questions_stats(db: AsyncSession = Depends(get_db)):
+    """Get stats about questions in the database."""
+    # Total questions
+    total_res = await db.execute(select(func.count(Question.id)))
+    total = total_res.scalar() or 0
+
+    # Per category
+    cat_stats = []
+    categories_res = await db.execute(
+        select(Question.category, func.count(Question.id).label("count"))
+        .group_by(Question.category)
+        .order_by(func.count(Question.id).desc())
+    )
+    for row in categories_res:
+        cat_stats.append({"category": row[0], "count": row[1]})
+
+    # Per batch
+    batch_stats = []
+    batch_res = await db.execute(
+        select(Question.batch, func.count(Question.id).label("count"))
+        .where(Question.batch.isnot(None))
+        .where(Question.batch != "")
+        .group_by(Question.batch)
+        .order_by(func.count(Question.id).desc())
+    )
+    for row in batch_res:
+        batch_stats.append({"batch": row[0], "count": row[1]})
+
+    return {
+        "total_questions": total,
+        "categories": cat_stats,
+        "batches": batch_stats,
+    }
+
+
 # ── Explore: Super Categories & Clusters ──
 
 @api_router.get("/explore/super-categories")

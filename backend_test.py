@@ -1,496 +1,507 @@
 #!/usr/bin/env python3
+"""
+Backend testing script for CSV Question Import System.
+Tests the new admin APIs for bulk CSV import functionality.
+"""
 
-import asyncio
-import httpx
+import requests
 import json
-from datetime import datetime
+import sys
+import time
+from typing import Dict, List, Any
 
-# Backend URL configuration
-BACKEND_URL = "https://mobile-duelo.preview.emergentagent.com/api"
+# Backend URL from frontend/.env - should use public endpoint
+BASE_URL = "https://duelo-matchmake.preview.emergentagent.com/api"
+ADMIN_PASSWORD = "Temporaire1!"
 
-class NotificationsTestSuite:
+class APITester:
     def __init__(self):
-        self.client = httpx.AsyncClient(timeout=30.0)
-        self.user1_id = None
-        self.user2_id = None
+        self.base_url = BASE_URL
+        self.session = requests.Session()
         self.test_results = []
         
-    async def log_result(self, test_name, success, details=""):
-        """Log test results"""
+    def log_test(self, test_name: str, success: bool, details: str = ""):
+        """Log a test result."""
         status = "✅ PASS" if success else "❌ FAIL"
-        result = {
+        self.test_results.append({
             "test": test_name,
-            "status": status,
-            "details": details,
-            "timestamp": datetime.now().isoformat()
-        }
-        self.test_results.append(result)
-        print(f"{status}: {test_name}")
+            "success": success,
+            "details": details
+        })
+        print(f"{status} {test_name}")
         if details:
-            print(f"  Details: {details}")
-        print()
-
-    async def register_guest_user(self, pseudo):
-        """Register a guest user and return user ID"""
+            print(f"    Details: {details}")
+    
+    def make_request(self, method: str, endpoint: str, data: Dict = None) -> requests.Response:
+        """Make HTTP request to API endpoint."""
+        url = f"{self.base_url}{endpoint}"
+        headers = {"Content-Type": "application/json"}
+        
         try:
-            response = await self.client.post(
-                f"{BACKEND_URL}/auth/register-guest",
-                json={"pseudo": pseudo}
-            )
-            if response.status_code == 200:
-                user_data = response.json()
-                return user_data["id"]
+            if method.upper() == "GET":
+                return self.session.get(url, timeout=30)
+            elif method.upper() == "POST":
+                return self.session.post(url, json=data, headers=headers, timeout=30)
             else:
-                await self.log_result(f"Register {pseudo}", False, f"Status: {response.status_code}, Response: {response.text}")
-                return None
+                raise ValueError(f"Unsupported method: {method}")
         except Exception as e:
-            await self.log_result(f"Register {pseudo}", False, f"Exception: {str(e)}")
-            return None
+            print(f"Request error: {e}")
+            raise
 
-    async def test_1_user_registration(self):
-        """Test 1: Register 2 guest users"""
-        print("=== Test 1: User Registration ===")
-        
-        self.user1_id = await self.register_guest_user("notif_user1")
-        if self.user1_id:
-            await self.log_result("Register user1 (notif_user1)", True, f"User ID: {self.user1_id}")
-        
-        self.user2_id = await self.register_guest_user("notif_user2")  
-        if self.user2_id:
-            await self.log_result("Register user2 (notif_user2)", True, f"User ID: {self.user2_id}")
-
-        return self.user1_id and self.user2_id
-
-    async def test_2_empty_notifications(self):
-        """Test 2: Check empty notifications initially"""
-        print("=== Test 2: Empty Notifications Initially ===")
+    def test_questions_stats_api(self):
+        """Test GET /api/admin/questions-stats endpoint."""
+        print("\n🔍 Testing Questions Stats API...")
         
         try:
-            # Test notifications list for user1
-            response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user1_id}")
-            if response.status_code == 200:
-                notifications = response.json()
-                if len(notifications) == 0:
-                    await self.log_result("User1 notifications empty initially", True, "Empty array returned")
-                else:
-                    await self.log_result("User1 notifications empty initially", False, f"Expected empty, got {len(notifications)} notifications")
-            else:
-                await self.log_result("User1 notifications empty initially", False, f"Status: {response.status_code}")
-
-            # Test unread count for user1
-            response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user1_id}/unread-count")
-            if response.status_code == 200:
-                count_data = response.json()
-                if count_data.get("unread_count") == 0:
-                    await self.log_result("User1 unread count initially zero", True, "Unread count: 0")
-                else:
-                    await self.log_result("User1 unread count initially zero", False, f"Expected 0, got {count_data.get('unread_count')}")
-            else:
-                await self.log_result("User1 unread count initially zero", False, f"Status: {response.status_code}")
-                
-        except Exception as e:
-            await self.log_result("Empty notifications test", False, f"Exception: {str(e)}")
-
-    async def test_3_follow_notification(self):
-        """Test 3: Trigger follow notification"""
-        print("=== Test 3: Follow Notification ===")
-        
-        try:
-            # User1 follows User2
-            response = await self.client.post(
-                f"{BACKEND_URL}/player/{self.user2_id}/follow",
-                json={"follower_id": self.user1_id}
-            )
-            if response.status_code == 200:
-                follow_data = response.json()
-                if follow_data.get("following"):
-                    await self.log_result("User1 follows User2", True, "Follow successful")
-                else:
-                    await self.log_result("User1 follows User2", False, f"Follow returned: {follow_data}")
-            else:
-                await self.log_result("User1 follows User2", False, f"Status: {response.status_code}, Response: {response.text}")
+            response = self.make_request("GET", "/admin/questions-stats")
+            
+            if response.status_code != 200:
+                self.log_test("Questions Stats API", False, f"Status code: {response.status_code}, Response: {response.text}")
                 return False
-
-            # Check User2 notifications should have 1 follow notification
-            response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user2_id}")
-            if response.status_code == 200:
-                notifications = response.json()
-                follow_notifications = [n for n in notifications if n.get("type") == "follow"]
-                if len(follow_notifications) == 1:
-                    notif = follow_notifications[0]
-                    # Validate notification structure
-                    required_fields = ["id", "type", "title", "body", "icon", "data", "actor_id", "actor_pseudo", "actor_avatar_seed", "read", "created_at"]
-                    missing_fields = [field for field in required_fields if field not in notif]
-                    if not missing_fields:
-                        await self.log_result("User2 has follow notification with correct structure", True, f"Notification: {notif['title']} - {notif['body']}")
-                        return True
-                    else:
-                        await self.log_result("User2 follow notification structure", False, f"Missing fields: {missing_fields}")
-                else:
-                    await self.log_result("User2 has follow notification", False, f"Expected 1 follow notification, got {len(follow_notifications)}")
-            else:
-                await self.log_result("Get User2 notifications after follow", False, f"Status: {response.status_code}")
-                
-        except Exception as e:
-            await self.log_result("Follow notification test", False, f"Exception: {str(e)}")
             
-        return False
-
-    async def test_4_message_notification(self):
-        """Test 4: Trigger message notification"""
-        print("=== Test 4: Message Notification ===")
-        
-        try:
-            # Send message from User1 to User2
-            response = await self.client.post(
-                f"{BACKEND_URL}/chat/send",
-                json={
-                    "sender_id": self.user1_id,
-                    "receiver_id": self.user2_id,
-                    "content": "Hello!",
-                    "message_type": "text"
-                }
-            )
-            if response.status_code == 200:
-                message_data = response.json()
-                await self.log_result("Send message User1 to User2", True, f"Message ID: {message_data['id']}")
-            else:
-                await self.log_result("Send message User1 to User2", False, f"Status: {response.status_code}, Response: {response.text}")
-                return False
-
-            # Check User2 notifications should now have 2 notifications (follow + message)
-            response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user2_id}")
-            if response.status_code == 200:
-                notifications = response.json()
-                message_notifications = [n for n in notifications if n.get("type") == "message"]
-                if len(message_notifications) >= 1:
-                    await self.log_result("User2 has message notification", True, f"Found {len(message_notifications)} message notification(s)")
-                else:
-                    await self.log_result("User2 has message notification", False, f"Expected message notification, got {len(message_notifications)}")
-
-                # Check unread count should be 2
-                response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user2_id}/unread-count")
-                if response.status_code == 200:
-                    count_data = response.json()
-                    unread_count = count_data.get("unread_count", 0)
-                    if unread_count >= 2:
-                        await self.log_result("User2 unread count after message", True, f"Unread count: {unread_count}")
-                        return True
-                    else:
-                        await self.log_result("User2 unread count after message", False, f"Expected >=2, got {unread_count}")
-                else:
-                    await self.log_result("Get User2 unread count", False, f"Status: {response.status_code}")
-            else:
-                await self.log_result("Get User2 notifications after message", False, f"Status: {response.status_code}")
-                
-        except Exception as e:
-            await self.log_result("Message notification test", False, f"Exception: {str(e)}")
+            data = response.json()
             
-        return False
-
-    async def test_5_mark_single_read(self):
-        """Test 5: Mark single notification as read"""
-        print("=== Test 5: Mark Single Notification as Read ===")
-        
-        try:
-            # Get first notification
-            response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user2_id}")
-            if response.status_code == 200:
-                notifications = response.json()
-                if len(notifications) > 0:
-                    first_notif = notifications[0]
-                    notif_id = first_notif["id"]
-                    
-                    # Mark as read
-                    response = await self.client.post(
-                        f"{BACKEND_URL}/notifications/{notif_id}/read",
-                        json={"user_id": self.user2_id}
-                    )
-                    if response.status_code == 200:
-                        await self.log_result("Mark single notification as read", True, f"Notification {notif_id} marked as read")
-                        
-                        # Verify unread count decreased
-                        response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user2_id}/unread-count")
-                        if response.status_code == 200:
-                            count_data = response.json()
-                            unread_count = count_data.get("unread_count", 0)
-                            await self.log_result("Unread count decreased after mark read", True, f"New unread count: {unread_count}")
-                            return True
-                        else:
-                            await self.log_result("Check unread count after mark read", False, f"Status: {response.status_code}")
-                    else:
-                        await self.log_result("Mark single notification as read", False, f"Status: {response.status_code}, Response: {response.text}")
-                else:
-                    await self.log_result("Get notifications for mark read test", False, "No notifications found")
-            else:
-                await self.log_result("Get notifications for mark read test", False, f"Status: {response.status_code}")
-                
-        except Exception as e:
-            await self.log_result("Mark single read test", False, f"Exception: {str(e)}")
+            # Validate response structure
+            required_fields = ["total_questions", "categories", "batches"]
+            for field in required_fields:
+                if field not in data:
+                    self.log_test("Questions Stats API", False, f"Missing field: {field}")
+                    return False
             
-        return False
-
-    async def test_6_mark_all_read(self):
-        """Test 6: Mark all notifications as read"""
-        print("=== Test 6: Mark All Notifications as Read ===")
-        
-        try:
-            # Mark all as read
-            response = await self.client.post(
-                f"{BACKEND_URL}/notifications/read-all",
-                json={"user_id": self.user2_id}
-            )
-            if response.status_code == 200:
-                await self.log_result("Mark all notifications as read", True, "All notifications marked as read")
-                
-                # Verify unread count is 0
-                response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user2_id}/unread-count")
-                if response.status_code == 200:
-                    count_data = response.json()
-                    unread_count = count_data.get("unread_count", 0)
-                    if unread_count == 0:
-                        await self.log_result("Unread count is zero after mark all read", True, "Unread count: 0")
-                        return True
-                    else:
-                        await self.log_result("Unread count is zero after mark all read", False, f"Expected 0, got {unread_count}")
-                else:
-                    await self.log_result("Check unread count after mark all read", False, f"Status: {response.status_code}")
-            else:
-                await self.log_result("Mark all notifications as read", False, f"Status: {response.status_code}, Response: {response.text}")
-                
-        except Exception as e:
-            await self.log_result("Mark all read test", False, f"Exception: {str(e)}")
+            # Validate categories structure
+            if isinstance(data["categories"], list):
+                for cat in data["categories"]:
+                    if not isinstance(cat, dict) or "category" not in cat or "count" not in cat:
+                        self.log_test("Questions Stats API", False, "Invalid category structure")
+                        return False
             
-        return False
-
-    async def test_7_notification_settings(self):
-        """Test 7: Notification settings CRUD and enforcement"""
-        print("=== Test 7: Notification Settings ===")
-        
-        try:
-            # Get default settings for user1
-            response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user1_id}/settings")
-            if response.status_code == 200:
-                settings = response.json()
-                # Check all default settings are True
-                expected_fields = ["challenges", "match_results", "follows", "messages", "likes", "comments", "system"]
-                all_true = all(settings.get(field) == True for field in expected_fields)
-                if all_true:
-                    await self.log_result("Default notification settings", True, f"All settings are True by default: {settings}")
-                else:
-                    await self.log_result("Default notification settings", False, f"Some settings not True: {settings}")
-            else:
-                await self.log_result("Get default notification settings", False, f"Status: {response.status_code}")
-
-            # Update settings - disable follows
-            response = await self.client.post(
-                f"{BACKEND_URL}/notifications/{self.user1_id}/settings",
-                json={"user_id": self.user1_id, "follows": False}
-            )
-            if response.status_code == 200:
-                updated_settings = response.json()
-                if updated_settings.get("follows") == False:
-                    await self.log_result("Update notification settings - disable follows", True, f"Follows disabled: {updated_settings}")
-                else:
-                    await self.log_result("Update notification settings - disable follows", False, f"Follows still enabled: {updated_settings}")
-            else:
-                await self.log_result("Update notification settings", False, f"Status: {response.status_code}, Response: {response.text}")
-
-            # Test settings enforcement: User2 follows User1 (should NOT create notification)
-            response = await self.client.post(
-                f"{BACKEND_URL}/player/{self.user1_id}/follow",
-                json={"follower_id": self.user2_id}
-            )
-            if response.status_code == 200:
-                await self.log_result("User2 follows User1 (for settings test)", True, "Follow successful")
-                
-                # Check User1 notifications - should NOT have new follow notification
-                response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user1_id}")
-                if response.status_code == 200:
-                    notifications = response.json()
-                    follow_notifications = [n for n in notifications if n.get("type") == "follow"]
-                    if len(follow_notifications) == 0:
-                        await self.log_result("Settings enforcement - no follow notification when disabled", True, "No follow notification created (correctly)")
-                        return True
-                    else:
-                        await self.log_result("Settings enforcement - no follow notification when disabled", False, f"Found {len(follow_notifications)} follow notifications, expected 0")
-                else:
-                    await self.log_result("Check User1 notifications for settings enforcement", False, f"Status: {response.status_code}")
-            else:
-                await self.log_result("User2 follows User1 (for settings test)", False, f"Status: {response.status_code}")
-                
-        except Exception as e:
-            await self.log_result("Notification settings test", False, f"Exception: {str(e)}")
+            # Validate batches structure
+            if isinstance(data["batches"], list):
+                for batch in data["batches"]:
+                    if not isinstance(batch, dict) or "batch" not in batch or "count" not in batch:
+                        self.log_test("Questions Stats API", False, "Invalid batch structure")
+                        return False
             
-        return False
-
-    async def test_8_like_notification(self):
-        """Test 8: Like notification"""
-        print("=== Test 8: Like Notification ===")
-        
-        try:
-            # First seed questions
-            response = await self.client.post(f"{BACKEND_URL}/seed-questions")
-            if response.status_code == 200:
-                await self.log_result("Seed questions for like test", True, "Questions seeded successfully")
-            else:
-                await self.log_result("Seed questions for like test", False, f"Status: {response.status_code}")
-
-            # Create a wall post by user1
-            response = await self.client.post(
-                f"{BACKEND_URL}/category/series_tv/wall",
-                json={"user_id": self.user1_id, "content": "Test post for like notification"}
-            )
-            if response.status_code == 200:
-                post_data = response.json()
-                post_id = post_data["id"]
-                await self.log_result("Create wall post for like test", True, f"Post ID: {post_id}")
-                
-                # Like the post as user2
-                response = await self.client.post(
-                    f"{BACKEND_URL}/wall/{post_id}/like",
-                    json={"user_id": self.user2_id}
-                )
-                if response.status_code == 200:
-                    like_data = response.json()
-                    if like_data.get("liked"):
-                        await self.log_result("User2 likes User1's post", True, "Post liked successfully")
-                        
-                        # Check user1 notifications for like notification
-                        response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user1_id}")
-                        if response.status_code == 200:
-                            notifications = response.json()
-                            like_notifications = [n for n in notifications if n.get("type") == "like"]
-                            if len(like_notifications) >= 1:
-                                await self.log_result("User1 has like notification", True, f"Found {len(like_notifications)} like notification(s)")
-                                return True
-                            else:
-                                await self.log_result("User1 has like notification", False, f"Expected like notification, got {len(like_notifications)}")
-                        else:
-                            await self.log_result("Check User1 notifications for like", False, f"Status: {response.status_code}")
-                    else:
-                        await self.log_result("User2 likes User1's post", False, f"Like failed: {like_data}")
-                else:
-                    await self.log_result("User2 likes User1's post", False, f"Status: {response.status_code}, Response: {response.text}")
-            else:
-                await self.log_result("Create wall post for like test", False, f"Status: {response.status_code}, Response: {response.text}")
-                
-        except Exception as e:
-            await self.log_result("Like notification test", False, f"Exception: {str(e)}")
+            self.log_test("Questions Stats API", True, f"Total: {data['total_questions']}, Categories: {len(data['categories'])}, Batches: {len(data['batches'])}")
+            return True
             
-        return False
-
-    async def test_9_comment_notification(self):
-        """Test 9: Comment notification"""
-        print("=== Test 9: Comment Notification ===")
-        
-        try:
-            # Get the latest post to comment on
-            response = await self.client.get(f"{BACKEND_URL}/category/series_tv/wall?user_id={self.user1_id}")
-            if response.status_code == 200:
-                posts = response.json()
-                if len(posts) > 0:
-                    post_id = posts[0]["id"]
-                    
-                    # Comment on the post as user2
-                    response = await self.client.post(
-                        f"{BACKEND_URL}/wall/{post_id}/comment",
-                        json={"user_id": self.user2_id, "content": "Nice post!"}
-                    )
-                    if response.status_code == 200:
-                        comment_data = response.json()
-                        await self.log_result("User2 comments on User1's post", True, f"Comment ID: {comment_data['id']}")
-                        
-                        # Check user1 notifications for comment notification  
-                        response = await self.client.get(f"{BACKEND_URL}/notifications/{self.user1_id}")
-                        if response.status_code == 200:
-                            notifications = response.json()
-                            comment_notifications = [n for n in notifications if n.get("type") == "comment"]
-                            if len(comment_notifications) >= 1:
-                                await self.log_result("User1 has comment notification", True, f"Found {len(comment_notifications)} comment notification(s)")
-                                return True
-                            else:
-                                await self.log_result("User1 has comment notification", False, f"Expected comment notification, got {len(comment_notifications)}")
-                        else:
-                            await self.log_result("Check User1 notifications for comment", False, f"Status: {response.status_code}")
-                    else:
-                        await self.log_result("User2 comments on User1's post", False, f"Status: {response.status_code}, Response: {response.text}")
-                else:
-                    await self.log_result("Get posts for comment test", False, "No posts found")
-            else:
-                await self.log_result("Get posts for comment test", False, f"Status: {response.status_code}")
-                
         except Exception as e:
-            await self.log_result("Comment notification test", False, f"Exception: {str(e)}")
-            
-        return False
-
-    async def run_all_tests(self):
-        """Run all notification tests"""
-        print("🔔 Starting Notifications System Backend Testing 🔔")
-        print("=" * 60)
-        
-        # Test 1: User Registration
-        if not await self.test_1_user_registration():
-            print("❌ Cannot continue tests without user registration")
+            self.log_test("Questions Stats API", False, f"Exception: {str(e)}")
             return False
+
+    def test_csv_upload_valid_data(self):
+        """Test POST /api/admin/upload-csv with valid data."""
+        print("\n📤 Testing CSV Upload with Valid Data...")
+        
+        test_questions = [
+            {
+                "id": "CSV_TEST_001",
+                "category": "TEST_CAT",
+                "question_text": "Test question 1?",
+                "option_a": "Answer A",
+                "option_b": "Answer B",
+                "option_c": "Answer C",
+                "option_d": "Answer D",
+                "correct_option": "B",
+                "difficulty": "easy",
+                "angle": "test_angle",
+                "batch": "test_batch_1"
+            },
+            {
+                "id": "CSV_TEST_002",
+                "category": "TEST_CAT",
+                "question_text": "Test question 2?",
+                "option_a": "Option A",
+                "option_b": "Option B",
+                "option_c": "Option C",
+                "option_d": "Option D",
+                "correct_option": "D",
+                "difficulty": "hard",
+                "angle": "",
+                "batch": "test_batch_1"
+            }
+        ]
+        
+        payload = {
+            "password": ADMIN_PASSWORD,
+            "questions": test_questions
+        }
+        
+        try:
+            response = self.make_request("POST", "/admin/upload-csv", payload)
             
-        # Test 2: Empty notifications initially
-        await self.test_2_empty_notifications()
+            if response.status_code != 200:
+                self.log_test("CSV Upload Valid Data", False, f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+            
+            data = response.json()
+            
+            # Expected response structure
+            expected_fields = ["success", "imported", "duplicates", "errors", "total_processed"]
+            for field in expected_fields:
+                if field not in data:
+                    self.log_test("CSV Upload Valid Data", False, f"Missing field: {field}")
+                    return False
+            
+            # Check if questions were imported
+            if not data["success"]:
+                self.log_test("CSV Upload Valid Data", False, "success=False in response")
+                return False
+                
+            if data["imported"] != 2:
+                self.log_test("CSV Upload Valid Data", False, f"Expected imported=2, got {data['imported']}")
+                return False
+            
+            if data["duplicates"] != 0:
+                self.log_test("CSV Upload Valid Data", False, f"Expected duplicates=0, got {data['duplicates']}")
+                return False
+            
+            if len(data["errors"]) != 0:
+                self.log_test("CSV Upload Valid Data", False, f"Expected 0 errors, got {len(data['errors'])}: {data['errors']}")
+                return False
+            
+            if data["total_processed"] != 2:
+                self.log_test("CSV Upload Valid Data", False, f"Expected total_processed=2, got {data['total_processed']}")
+                return False
+            
+            self.log_test("CSV Upload Valid Data", True, f"Imported: {data['imported']}, Duplicates: {data['duplicates']}, Errors: {len(data['errors'])}")
+            return True
+            
+        except Exception as e:
+            self.log_test("CSV Upload Valid Data", False, f"Exception: {str(e)}")
+            return False
+
+    def test_csv_upload_duplicate_handling(self):
+        """Test duplicate handling by sending the same questions again."""
+        print("\n🔁 Testing CSV Upload Duplicate Handling...")
         
-        # Test 3: Follow notification
-        await self.test_3_follow_notification()
+        # Use same test questions as before
+        test_questions = [
+            {
+                "id": "CSV_TEST_001",
+                "category": "TEST_CAT",
+                "question_text": "Test question 1?",
+                "option_a": "Answer A",
+                "option_b": "Answer B",
+                "option_c": "Answer C",
+                "option_d": "Answer D",
+                "correct_option": "B",
+                "difficulty": "easy",
+                "angle": "test_angle",
+                "batch": "test_batch_1"
+            },
+            {
+                "id": "CSV_TEST_002",
+                "category": "TEST_CAT",
+                "question_text": "Test question 2?",
+                "option_a": "Option A",
+                "option_b": "Option B",
+                "option_c": "Option C",
+                "option_d": "Option D",
+                "correct_option": "D",
+                "difficulty": "hard",
+                "angle": "",
+                "batch": "test_batch_1"
+            }
+        ]
         
-        # Test 4: Message notification 
-        await self.test_4_message_notification()
+        payload = {
+            "password": ADMIN_PASSWORD,
+            "questions": test_questions
+        }
         
-        # Test 5: Mark single as read
-        await self.test_5_mark_single_read()
+        try:
+            response = self.make_request("POST", "/admin/upload-csv", payload)
+            
+            if response.status_code != 200:
+                self.log_test("CSV Upload Duplicate Handling", False, f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+            
+            data = response.json()
+            
+            # Should detect duplicates
+            if not data["success"]:
+                self.log_test("CSV Upload Duplicate Handling", False, "success=False in response")
+                return False
+                
+            if data["imported"] != 0:
+                self.log_test("CSV Upload Duplicate Handling", False, f"Expected imported=0, got {data['imported']}")
+                return False
+            
+            if data["duplicates"] != 2:
+                self.log_test("CSV Upload Duplicate Handling", False, f"Expected duplicates=2, got {data['duplicates']}")
+                return False
+            
+            if data["total_processed"] != 2:
+                self.log_test("CSV Upload Duplicate Handling", False, f"Expected total_processed=2, got {data['total_processed']}")
+                return False
+            
+            self.log_test("CSV Upload Duplicate Handling", True, f"Correctly detected {data['duplicates']} duplicates")
+            return True
+            
+        except Exception as e:
+            self.log_test("CSV Upload Duplicate Handling", False, f"Exception: {str(e)}")
+            return False
+
+    def test_csv_upload_invalid_data(self):
+        """Test CSV upload with invalid data."""
+        print("\n⚠️  Testing CSV Upload with Invalid Data...")
         
-        # Test 6: Mark all as read
-        await self.test_6_mark_all_read()
+        invalid_questions = [
+            {
+                # Missing question_text
+                "category": "TEST",
+                "question_text": "",
+                "option_a": "A",
+                "option_b": "B",
+                "option_c": "C",
+                "option_d": "D",
+                "correct_option": "A"
+            },
+            {
+                # Missing category
+                "category": "",
+                "question_text": "Some question?",
+                "option_a": "A",
+                "option_b": "B",
+                "option_c": "C",
+                "option_d": "D",
+                "correct_option": "A"
+            },
+            {
+                # Invalid correct_option
+                "category": "TEST",
+                "question_text": "Some question?",
+                "option_a": "A",
+                "option_b": "B",
+                "option_c": "C",
+                "option_d": "D",
+                "correct_option": "X"
+            }
+        ]
         
-        # Test 7: Notification settings
-        await self.test_7_notification_settings()
+        payload = {
+            "password": ADMIN_PASSWORD,
+            "questions": invalid_questions
+        }
         
-        # Test 8: Like notification
-        await self.test_8_like_notification()
+        try:
+            response = self.make_request("POST", "/admin/upload-csv", payload)
+            
+            if response.status_code != 200:
+                self.log_test("CSV Upload Invalid Data", False, f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+            
+            data = response.json()
+            
+            # Should have errors but still return success=True
+            if not data["success"]:
+                self.log_test("CSV Upload Invalid Data", False, "success=False in response")
+                return False
+                
+            if data["imported"] != 0:
+                self.log_test("CSV Upload Invalid Data", False, f"Expected imported=0, got {data['imported']}")
+                return False
+            
+            if data["duplicates"] != 0:
+                self.log_test("CSV Upload Invalid Data", False, f"Expected duplicates=0, got {data['duplicates']}")
+                return False
+            
+            if len(data["errors"]) != 3:
+                self.log_test("CSV Upload Invalid Data", False, f"Expected 3 errors, got {len(data['errors'])}: {data['errors']}")
+                return False
+            
+            if data["total_processed"] != 3:
+                self.log_test("CSV Upload Invalid Data", False, f"Expected total_processed=3, got {data['total_processed']}")
+                return False
+            
+            self.log_test("CSV Upload Invalid Data", True, f"Correctly handled {len(data['errors'])} errors")
+            return True
+            
+        except Exception as e:
+            self.log_test("CSV Upload Invalid Data", False, f"Exception: {str(e)}")
+            return False
+
+    def test_csv_upload_wrong_password(self):
+        """Test CSV upload with wrong password."""
+        print("\n🔒 Testing CSV Upload with Wrong Password...")
         
-        # Test 9: Comment notification
-        await self.test_9_comment_notification()
+        payload = {
+            "password": "wrong",
+            "questions": [
+                {
+                    "category": "TEST",
+                    "question_text": "Test?",
+                    "option_a": "A",
+                    "option_b": "B",
+                    "option_c": "C",
+                    "option_d": "D",
+                    "correct_option": "A"
+                }
+            ]
+        }
+        
+        try:
+            response = self.make_request("POST", "/admin/upload-csv", payload)
+            
+            if response.status_code == 403:
+                self.log_test("CSV Upload Wrong Password", True, "Correctly returned 403 Forbidden")
+                return True
+            else:
+                self.log_test("CSV Upload Wrong Password", False, f"Expected 403, got {response.status_code}")
+                return False
+            
+        except Exception as e:
+            self.log_test("CSV Upload Wrong Password", False, f"Exception: {str(e)}")
+            return False
+
+    def test_csv_upload_auto_id_generation(self):
+        """Test CSV upload with auto ID generation."""
+        print("\n🔢 Testing CSV Upload Auto-ID Generation...")
+        
+        test_questions = [
+            {
+                # No id field - should auto-generate
+                "category": "TEST_AUTO",
+                "question_text": "Auto ID question?",
+                "option_a": "A1",
+                "option_b": "B1",
+                "option_c": "C1",
+                "option_d": "D1",
+                "correct_option": "C",
+                "difficulty": "medium"
+            }
+        ]
+        
+        payload = {
+            "password": ADMIN_PASSWORD,
+            "questions": test_questions
+        }
+        
+        try:
+            response = self.make_request("POST", "/admin/upload-csv", payload)
+            
+            if response.status_code != 200:
+                self.log_test("CSV Upload Auto-ID", False, f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+            
+            data = response.json()
+            
+            if not data["success"]:
+                self.log_test("CSV Upload Auto-ID", False, "success=False in response")
+                return False
+                
+            if data["imported"] != 1:
+                self.log_test("CSV Upload Auto-ID", False, f"Expected imported=1, got {data['imported']}")
+                return False
+            
+            self.log_test("CSV Upload Auto-ID", True, "Auto-generated ID and imported question")
+            return True
+            
+        except Exception as e:
+            self.log_test("CSV Upload Auto-ID", False, f"Exception: {str(e)}")
+            return False
+
+    def test_questions_stats_after_imports(self):
+        """Test questions-stats endpoint after all imports."""
+        print("\n📊 Testing Questions Stats After Imports...")
+        
+        try:
+            response = self.make_request("GET", "/admin/questions-stats")
+            
+            if response.status_code != 200:
+                self.log_test("Questions Stats After Imports", False, f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+            
+            data = response.json()
+            
+            # Should show updated counts
+            test_cat_found = False
+            test_auto_found = False
+            
+            for cat in data["categories"]:
+                if cat["category"] == "TEST_CAT" and cat["count"] >= 2:
+                    test_cat_found = True
+                elif cat["category"] == "TEST_AUTO" and cat["count"] >= 1:
+                    test_auto_found = True
+            
+            if not test_cat_found:
+                self.log_test("Questions Stats After Imports", False, "TEST_CAT category not found or count < 2")
+                return False
+            
+            if not test_auto_found:
+                self.log_test("Questions Stats After Imports", False, "TEST_AUTO category not found or count < 1")
+                return False
+            
+            # Check for batches
+            test_batch_found = False
+            for batch in data["batches"]:
+                if batch["batch"] == "test_batch_1" and batch["count"] >= 2:
+                    test_batch_found = True
+            
+            if not test_batch_found:
+                self.log_test("Questions Stats After Imports", False, "test_batch_1 batch not found or count < 2")
+                return False
+            
+            self.log_test("Questions Stats After Imports", True, f"Updated counts - Total: {data['total_questions']}, TEST_CAT and TEST_AUTO categories found, test_batch_1 found")
+            return True
+            
+        except Exception as e:
+            self.log_test("Questions Stats After Imports", False, f"Exception: {str(e)}")
+            return False
+
+    def run_all_tests(self):
+        """Run all CSV import system tests."""
+        print(f"🚀 Starting CSV Question Import System Tests...")
+        print(f"Backend URL: {self.base_url}")
+        print(f"Admin Password: {ADMIN_PASSWORD}")
+        
+        # Run tests in sequence
+        tests = [
+            self.test_questions_stats_api,
+            self.test_csv_upload_valid_data,
+            self.test_csv_upload_duplicate_handling,
+            self.test_csv_upload_invalid_data,
+            self.test_csv_upload_wrong_password,
+            self.test_csv_upload_auto_id_generation,
+            self.test_questions_stats_after_imports,
+        ]
+        
+        passed = 0
+        total = len(tests)
+        
+        for test in tests:
+            if test():
+                passed += 1
+            time.sleep(0.5)  # Small delay between tests
         
         # Summary
-        print("=" * 60)
-        print("🔔 NOTIFICATIONS SYSTEM TEST SUMMARY 🔔")
-        print("=" * 60)
+        print(f"\n{'='*60}")
+        print(f"📋 CSV Import System Test Results: {passed}/{total} tests passed")
         
-        passed_tests = [r for r in self.test_results if "✅ PASS" in r["status"]]
-        failed_tests = [r for r in self.test_results if "❌ FAIL" in r["status"]]
-        
-        print(f"✅ PASSED: {len(passed_tests)}")
-        print(f"❌ FAILED: {len(failed_tests)}")
-        print()
-        
-        if failed_tests:
-            print("FAILED TESTS:")
-            for test in failed_tests:
-                print(f"  ❌ {test['test']}: {test['details']}")
-            print()
-        
-        print("ALL TEST RESULTS:")
-        for test in self.test_results:
-            print(f"  {test['status']}: {test['test']}")
-        
-        await self.client.aclose()
-        return len(failed_tests) == 0
+        if passed == total:
+            print("✅ All tests PASSED! CSV import system is working correctly.")
+            return True
+        else:
+            print("❌ Some tests FAILED! Check details above.")
+            
+            # Show failed tests
+            print("\n Failed tests:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"   ❌ {result['test']}: {result['details']}")
+            
+            return False
 
-async def main():
-    test_suite = NotificationsTestSuite()
-    success = await test_suite.run_all_tests()
-    if success:
-        print("\n🎉 ALL NOTIFICATIONS TESTS PASSED!")
-    else:
-        print("\n⚠️  SOME NOTIFICATIONS TESTS FAILED!")
+def main():
+    """Main test runner."""
+    print("CSV Question Import System Backend Testing")
+    print("=" * 60)
     
+    tester = APITester()
+    success = tester.run_all_tests()
+    
+    sys.exit(0 if success else 1)
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

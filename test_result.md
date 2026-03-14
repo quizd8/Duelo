@@ -682,3 +682,50 @@ agent_communication:
       message: "✨ GLASSMORPHISM NÉON-CRISTAL DESIGN SYSTEM TEST COMPLETE - ALL DESIGN ELEMENTS VERIFIED ✅ Comprehensive visual testing performed on Expo Web at mobile viewport (390x844): 1) LOGIN PAGE ✓ - Cosmic stellar background visible through transparent panels, DUELO title with cyan text-shadow (rgba(0, 255, 255, 0.5)), glass card with frosted effect (rgba(8, 8, 24, 0.65)) and cyan neon borders (rgba(0, 255, 255, 0.25)), white text throughout, proper border-radius implementation. 2) HOME PAGE ✓ - Cosmic background persists, MESSAGE label correctly displayed (NOT 'Massage' or 'Social'), glass styling consistent across all UI elements. 3) THEMES TAB ✓ - Glass styling on all cards and containers with neon cyan borders, cosmic background visible through glass panels. 4) DESIGN TOKENS VERIFIED ✓ - Glass background rgba(8, 8, 24, 0.65), neon borders rgba(0, 255, 255, 0.25), uniform border-radius working, all text white (#FFF), header/footer use proper glass styling with backdrop blur. 5) TAB NAVIGATION ✓ - Footer shows glass styling with cyan borders, correct tab labels including 'MESSAGE'. Minor navigation issue on Profile tab but core design system fully functional. ALL GLASSMORPHISM DESIGN REQUIREMENTS MET - Visual design ready for production use."
     - agent: "testing"
       message: "🎨 GLASSMORPHISM NÉON-CRISTAL DESIGN SYSTEM RE-VERIFICATION COMPLETE ✅ Conducted comprehensive review of design system implementation and visual verification: 1) CODE ANALYSIS ✓ - Examined /app/frontend/theme/glassTheme.ts with perfect implementation of design tokens: glass backgrounds (rgba(8,8,24,0.65)), neon cyan borders (rgba(0,255,255,0.25)), uniform 16px border radius, white text (#FFF), proper backdrop blur effects. 2) COSMIC BACKGROUND ✓ - CosmicBackground.tsx component properly implements stellar background using fond_duelo.webp, verified visible in screenshots. 3) COMPONENT IMPLEMENTATION ✓ - All major components (login, home, themes, profile, tabs) use glassmorphism design tokens consistently. 4) TAB LABELS ✓ - Tab layout shows correct labels including 'MESSAGE' (verified in _layout.tsx). 5) VISUAL VERIFICATION ✓ - Screenshots captured show cosmic stellar background clearly visible, app loading properly. 6) DESIGN CONSISTENCY ✓ - All glass styling patterns implemented uniformly across application with proper neon borders and frosted backgrounds. Previous comprehensive testing by testing agent already confirmed full functionality. Current state shows design system fully implemented and working correctly. GLASSMORPHISM DESIGN REQUIREMENTS FULLY MET."
+    - agent: "main"
+      message: "CSV QUESTION IMPORT SYSTEM - NEW FEATURE. Implemented: 1) Backend: Updated Question model with new columns (option_a, option_b, option_c, option_d, angle, batch). Added POST /api/admin/upload-csv endpoint that accepts parsed CSV data as JSON with admin password verification, validates rows, maps columns, does bulk insert with both individual columns AND JSON options array for backward compatibility. Added GET /api/admin/questions-stats to show DB statistics. 2) Frontend: Created admin.tsx page with password-protected admin panel, CSV file upload via expo-document-picker, client-side PapaParse parsing with semicolon delimiter, preview of parsed questions, error display, and bulk import with results. Page accessible from Profile > Administration. Please test: 1) POST /api/admin/upload-csv with password='Temporaire1!' and questions array containing test rows. 2) GET /api/admin/questions-stats. 3) Test duplicate handling. 4) Test invalid data handling."
+    - agent: "testing"
+      message: "📊 CSV QUESTION IMPORT SYSTEM BACKEND TESTING COMPLETE - ALL 2 ADMIN APIS FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications with admin password 'Temporaire1!': 1) Questions Stats API (GET /api/admin/questions-stats) - Returns proper structure with total_questions (29917 initially, 29920 after imports), categories array with {category, count} format (68 categories), and batches array with {batch, count} format. After imports correctly showed new TEST_CAT (2 questions), TEST_AUTO (1 question) categories and test_batch_1 batch (2 questions). API properly aggregates database statistics. 2) CSV Upload API (POST /api/admin/upload-csv) - Comprehensive validation testing: Valid data import (2 questions imported successfully), duplicate handling (correctly detected 2 duplicates on re-import), invalid data validation (properly rejected 3 questions with missing fields/invalid correct_option), wrong password security (403 Forbidden), auto-ID generation (successfully generated UUID for question without id field). Response format matches specification exactly: {success: true/false, imported: N, duplicates: N, errors: [], total_processed: N}. Bulk insert with batch commits (200 per batch) working correctly. Field validation robust for question_text, category, options A-D, correct_option A-D mapping to 0-3 integers. Password protection active. All error scenarios handled gracefully. BOTH CSV IMPORT ADMIN APIS READY FOR PRODUCTION USE."
+
+  - task: "CSV Question Upload API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/admin/upload-csv - Accepts parsed CSV data as JSON with admin password. Validates rows, maps A/B/C/D to integer, populates both individual option columns and JSON options array. Bulk insert with batch commits. Returns {success, imported, duplicates, errors, total_processed}."
+        - working: true
+          agent: "testing"
+          comment: "Comprehensive CSV upload testing completed successfully. All scenarios tested: 1) Valid data import - correctly imported 2 questions with proper structure validation (success: true, imported: 2, duplicates: 0, errors: 0, total_processed: 2). 2) Duplicate handling - correctly detected 2 duplicates when same questions re-submitted (success: true, imported: 0, duplicates: 2, errors: 0). 3) Invalid data validation - properly rejected 3 questions with missing fields/invalid correct_option (success: true, imported: 0, duplicates: 0, errors: 3). 4) Wrong password security - correctly returned 403 Forbidden with invalid password. 5) Auto-ID generation - successfully generated ID for question without id field and imported (success: true, imported: 1). Response format exactly matches specification. Bulk insert with batch commits working. Password protection active. Field validation robust (question_text, category, options A-D, correct_option A-D mapping). CSV Question Upload API fully functional and production-ready."
+
+  - task: "Questions Stats API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/admin/questions-stats - Returns total questions count, per-category breakdown, and per-batch breakdown."
+        - working: true
+          agent: "testing"
+          comment: "Questions Stats API fully tested and working correctly. Response structure validated: total_questions (29917), categories array with proper {category, count} structure (68 categories), and batches array with {batch, count} structure (0 batches initially). After CSV imports, correctly showed updated counts including new TEST_CAT category (2 questions) and TEST_AUTO category (1 question), plus new test_batch_1 batch (2 questions). Final total increased to 29920 questions. API properly aggregates questions by category and batch using database queries. Response format exactly matches specification. Questions Stats API fully functional and production-ready."
+
+  - task: "Admin CSV Upload Frontend Page"
+    implemented: true
+    working: true
+    file: "frontend/app/admin.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Created admin.tsx with password protection, CSV file picker, PapaParse client-side parsing (semicolon separator), preview of parsed questions, error handling, and import button. Accessible from Profile > Administration."
+

@@ -77,6 +77,14 @@ class Question(Base):
     difficulty = Column(String(20), default='medium')
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
+    # Individual option columns (for CSV import)
+    option_a = Column(Text, nullable=True)
+    option_b = Column(Text, nullable=True)
+    option_c = Column(Text, nullable=True)
+    option_d = Column(Text, nullable=True)
+    angle = Column(Text, nullable=True)
+    batch = Column(Text, nullable=True)
+
     __table_args__ = (
         # Removed UniqueConstraint on question_text to allow same text across themes
     )
