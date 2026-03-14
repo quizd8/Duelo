@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, func, text, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
-from models import User, Question, Match, CategoryFollow, WallPost, PostLike, PostComment, PlayerFollow, ChatMessage, Notification, NotificationSettings, Theme, UserThemeXP, generate_uuid
+from models import User, Question, Match, CategoryFollow, WallPost, PostLike, PostComment, PlayerFollow, ChatMessage, Notification, NotificationSettings, Theme, UserThemeXP, QuestionReport, generate_uuid
 import csv
 import io
 
@@ -3690,6 +3690,52 @@ async def get_profile_v2(user_id: str, pseudo: Optional[str] = None, db: AsyncSe
             } for m in matches
         ],
     }
+
+
+# ── Question Report (Signal Error) ──
+
+class QuestionReportRequest(BaseModel):
+    user_id: str
+    question_id: str
+    question_text: Optional[str] = None
+    category: Optional[str] = None
+    reason_type: str  # wrong_answer, unclear_question, typo, outdated, other
+    description: Optional[str] = None
+
+@api_router.post("/questions/report")
+async def report_question(req: QuestionReportRequest, db: AsyncSession = Depends(get_db)):
+    """Report an error in a quiz question."""
+    valid_reasons = ["wrong_answer", "unclear_question", "typo", "outdated", "other"]
+    if req.reason_type not in valid_reasons:
+        raise HTTPException(status_code=400, detail=f"reason_type must be one of: {', '.join(valid_reasons)}")
+
+    if not req.user_id or not req.question_id:
+        raise HTTPException(status_code=400, detail="user_id and question_id are required")
+
+    # Check for duplicate report
+    existing = await db.execute(
+        select(QuestionReport).where(
+            QuestionReport.user_id == req.user_id,
+            QuestionReport.question_id == req.question_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Vous avez déjà signalé cette question")
+
+    report = QuestionReport(
+        user_id=req.user_id,
+        question_id=req.question_id,
+        question_text=req.question_text,
+        category=req.category,
+        reason_type=req.reason_type,
+        description=req.description[:500] if req.description else None,
+        status="pending",
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+
+    return {"success": True, "report_id": report.id}
 
 
 # ── App Setup ──

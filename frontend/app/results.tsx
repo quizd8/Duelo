@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Animated, Share, Modal, ActivityIndicator
+  View, Text, TouchableOpacity, StyleSheet, Animated, Share, Modal, ActivityIndicator,
+  ScrollView, TextInput, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -30,6 +31,21 @@ type NewTitle = {
   category: string;
 };
 
+type QuizQuestion = {
+  id: string;
+  question_text: string;
+  options: string[];
+  correct_option: number;
+};
+
+const REPORT_REASONS = [
+  { id: 'wrong_answer', label: 'Mauvaise réponse', icon: '❌' },
+  { id: 'unclear_question', label: 'Question pas claire', icon: '❓' },
+  { id: 'typo', label: 'Faute / erreur de texte', icon: '✏️' },
+  { id: 'outdated', label: 'Information obsolète', icon: '📅' },
+  { id: 'other', label: 'Autre', icon: '💬' },
+];
+
 export default function ResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -50,6 +66,17 @@ export default function ResultsScreen() {
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [submitting, setSubmitting] = useState(true);
 
+  // Report question states
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportStep, setReportStep] = useState<'select' | 'reason'>('select');
+  const [selectedQuestion, setSelectedQuestion] = useState<QuizQuestion | null>(null);
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const cardSlide = useRef(new Animated.Value(60)).current;
@@ -62,6 +89,7 @@ export default function ResultsScreen() {
 
   useEffect(() => {
     submitMatch();
+    loadQuizQuestions();
     Haptics.notificationAsync(
       won ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error
     );
@@ -136,6 +164,67 @@ export default function ResultsScreen() {
       ? `🏆 Victoire sur Duelo ! ${pScore}-${oScore} en ${categoryName} (${correctCount}/7). Viens me défier ! ⚡`
       : `⚡ Duel intense sur Duelo ! ${pScore}-${oScore} en ${categoryName}. Viens me battre ! 🎮`;
     try { await Share.share({ message: text }); } catch {}
+  };
+
+  const loadQuizQuestions = async () => {
+    try {
+      const raw = await AsyncStorage.getItem('duelo_last_quiz_questions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setQuizQuestions(parsed);
+      }
+    } catch {}
+  };
+
+  const openReportModal = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReportStep('select');
+    setSelectedQuestion(null);
+    setSelectedReason(null);
+    setReportDescription('');
+    setReportSuccess(false);
+    setReportError(null);
+    setReportModalVisible(true);
+  };
+
+  const selectQuestionForReport = (q: QuizQuestion) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedQuestion(q);
+    setReportStep('reason');
+    setReportError(null);
+  };
+
+  const submitReport = async () => {
+    if (!selectedQuestion || !selectedReason) return;
+    Keyboard.dismiss();
+    setReportSubmitting(true);
+    setReportError(null);
+    try {
+      const userId = params.userId || await AsyncStorage.getItem('duelo_user_id');
+      const res = await fetch(`${API_URL}/api/questions/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          question_id: selectedQuestion.id,
+          question_text: selectedQuestion.question_text,
+          category: params.category,
+          reason_type: selectedReason,
+          description: reportDescription.trim() || undefined,
+        }),
+      });
+      if (res.status === 409) {
+        setReportError('Vous avez déjà signalé cette question');
+      } else if (!res.ok) {
+        setReportError('Erreur lors de l\'envoi. Réessayez.');
+      } else {
+        setReportSuccess(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      setReportError('Erreur réseau. Vérifiez votre connexion.');
+    }
+    setReportSubmitting(false);
   };
 
   const playAgain = () => {
@@ -240,8 +329,130 @@ export default function ResultsScreen() {
           <TouchableOpacity testID="go-home-btn" style={styles.homeButton} onPress={() => router.replace('/(tabs)/play')}>
             <Text style={styles.homeText}>Retour à l'accueil</Text>
           </TouchableOpacity>
+
+          {quizQuestions.length > 0 && (
+            <TouchableOpacity testID="report-error-btn" style={styles.reportButton} onPress={openReportModal} activeOpacity={0.7}>
+              <Text style={styles.reportButtonText}>⚠️ Signaler une erreur dans une question</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </View>
+
+      {/* Report Question Modal */}
+      <Modal visible={reportModalVisible} transparent animationType="slide" onRequestClose={() => setReportModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.reportOverlay}>
+            <View style={styles.reportModal}>
+              {/* Header */}
+              <View style={styles.reportHeader}>
+                <Text style={styles.reportHeaderText}>
+                  {reportSuccess ? '✅ Merci !' : reportStep === 'select' ? '⚠️ Signaler une erreur' : '📝 Détails du signalement'}
+                </Text>
+                <TouchableOpacity onPress={() => setReportModalVisible(false)} style={styles.reportClose}>
+                  <Text style={styles.reportCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {reportSuccess ? (
+                /* Success State */
+                <View style={styles.reportSuccessContainer}>
+                  <Text style={styles.reportSuccessEmoji}>🎉</Text>
+                  <Text style={styles.reportSuccessTitle}>Signalement envoyé !</Text>
+                  <Text style={styles.reportSuccessDesc}>
+                    Merci de nous aider à améliorer Duelo. Nous examinerons cette question rapidement.
+                  </Text>
+                  <TouchableOpacity style={styles.reportSuccessBtn} onPress={() => setReportModalVisible(false)} activeOpacity={0.8}>
+                    <Text style={styles.reportSuccessBtnText}>FERMER</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : reportStep === 'select' ? (
+                /* Step 1: Select Question */
+                <ScrollView style={styles.reportScroll} showsVerticalScrollIndicator={false}>
+                  <Text style={styles.reportSubtitle}>Quelle question contenait une erreur ?</Text>
+                  {quizQuestions.map((q, idx) => (
+                    <TouchableOpacity
+                      key={q.id || idx.toString()}
+                      style={styles.reportQuestionItem}
+                      onPress={() => selectQuestionForReport(q)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.reportQuestionNumber}>
+                        <Text style={styles.reportQuestionNumberText}>{idx + 1}</Text>
+                      </View>
+                      <Text style={styles.reportQuestionText} numberOfLines={2}>
+                        {q.question_text}
+                      </Text>
+                      <Text style={styles.reportQuestionArrow}>›</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : (
+                /* Step 2: Reason + Description */
+                <ScrollView style={styles.reportScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  {/* Selected question preview */}
+                  <View style={styles.reportSelectedPreview}>
+                    <Text style={styles.reportSelectedLabel}>Question sélectionnée :</Text>
+                    <Text style={styles.reportSelectedText} numberOfLines={2}>{selectedQuestion?.question_text}</Text>
+                  </View>
+
+                  <Text style={styles.reportSubtitle}>Type d'erreur</Text>
+                  {REPORT_REASONS.map((r) => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.reportReasonItem, selectedReason === r.id && styles.reportReasonSelected]}
+                      onPress={() => { setSelectedReason(r.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.reportReasonIcon}>{r.icon}</Text>
+                      <Text style={[styles.reportReasonLabel, selectedReason === r.id && styles.reportReasonLabelSelected]}>
+                        {r.label}
+                      </Text>
+                      {selectedReason === r.id && <Text style={styles.reportReasonCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+
+                  <Text style={[styles.reportSubtitle, { marginTop: 16 }]}>Description (optionnel)</Text>
+                  <TextInput
+                    style={styles.reportInput}
+                    placeholder="Décrivez l'erreur..."
+                    placeholderTextColor="#525252"
+                    value={reportDescription}
+                    onChangeText={setReportDescription}
+                    multiline
+                    maxLength={500}
+                    textAlignVertical="top"
+                  />
+                  <Text style={styles.reportCharCount}>{reportDescription.length}/500</Text>
+
+                  {reportError && (
+                    <View style={styles.reportErrorBanner}>
+                      <Text style={styles.reportErrorText}>{reportError}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.reportActions}>
+                    <TouchableOpacity style={styles.reportBackBtn} onPress={() => setReportStep('select')} activeOpacity={0.7}>
+                      <Text style={styles.reportBackText}>← Retour</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.reportSubmitBtn, (!selectedReason || reportSubmitting) && styles.reportSubmitDisabled]}
+                      onPress={submitReport}
+                      disabled={!selectedReason || reportSubmitting}
+                      activeOpacity={0.8}
+                    >
+                      {reportSubmitting ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <Text style={styles.reportSubmitText}>ENVOYER</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Title Celebration Modal */}
       {newTitle && (
@@ -280,7 +491,7 @@ export default function ResultsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 16 },
   resultHeader: { alignItems: 'center', marginBottom: 20 },
   resultEmoji: { fontSize: 56, marginBottom: 8 },
   resultTitle: { fontSize: 32, fontWeight: '900', letterSpacing: 4 },
@@ -363,4 +574,102 @@ const styles = StyleSheet.create({
     shadowColor: '#8A2BE2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 16,
   },
   celebrationBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 3 },
+  // Report Button
+  reportButton: {
+    marginTop: 6, padding: 12, alignItems: 'center', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,165,0,0.2)', backgroundColor: 'rgba(255,165,0,0.05)',
+  },
+  reportButtonText: { color: '#FFA500', fontSize: 12, fontWeight: '600' },
+  // Report Modal
+  reportOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end',
+  },
+  reportModal: {
+    backgroundColor: '#0D0D1A', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    maxHeight: '85%', minHeight: 300,
+    borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1,
+    borderColor: 'rgba(0,255,255,0.15)',
+  },
+  reportHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  reportHeaderText: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 1 },
+  reportClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
+  reportCloseText: { color: '#A3A3A3', fontSize: 16, fontWeight: '600' },
+  reportScroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
+  reportSubtitle: { color: '#A3A3A3', fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  // Question list item
+  reportQuestionItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  reportQuestionNumber: {
+    width: 28, height: 28, borderRadius: 10, backgroundColor: 'rgba(138,43,226,0.2)',
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  reportQuestionNumberText: { color: '#8A2BE2', fontSize: 13, fontWeight: '800' },
+  reportQuestionText: { flex: 1, color: '#E5E5E5', fontSize: 13, fontWeight: '500', lineHeight: 18 },
+  reportQuestionArrow: { color: '#525252', fontSize: 20, fontWeight: '300', marginLeft: 8 },
+  // Selected question preview
+  reportSelectedPreview: {
+    backgroundColor: 'rgba(138,43,226,0.08)', borderRadius: 12, padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: 'rgba(138,43,226,0.2)',
+  },
+  reportSelectedLabel: { color: '#8A2BE2', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 6 },
+  reportSelectedText: { color: '#E5E5E5', fontSize: 13, fontWeight: '500', lineHeight: 18 },
+  // Reason items
+  reportReasonItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 6,
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  reportReasonSelected: {
+    backgroundColor: 'rgba(0,255,255,0.06)', borderColor: 'rgba(0,255,255,0.25)',
+  },
+  reportReasonIcon: { fontSize: 18, marginRight: 12 },
+  reportReasonLabel: { flex: 1, color: '#A3A3A3', fontSize: 14, fontWeight: '600' },
+  reportReasonLabelSelected: { color: '#FFF' },
+  reportReasonCheck: { color: '#00FFFF', fontSize: 16, fontWeight: '800' },
+  // Description input
+  reportInput: {
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', color: '#FFF',
+    fontSize: 14, fontWeight: '500', height: 90, textAlignVertical: 'top',
+  },
+  reportCharCount: { color: '#525252', fontSize: 11, fontWeight: '500', textAlign: 'right', marginTop: 4 },
+  // Error banner
+  reportErrorBanner: {
+    backgroundColor: 'rgba(255,59,48,0.1)', borderRadius: 10, padding: 12, marginTop: 12,
+    borderWidth: 1, borderColor: 'rgba(255,59,48,0.2)',
+  },
+  reportErrorText: { color: '#FF3B30', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  // Action buttons
+  reportActions: {
+    flexDirection: 'row', gap: 10, marginTop: 20, paddingBottom: 20,
+  },
+  reportBackBtn: {
+    flex: 1, padding: 14, borderRadius: 14, alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  reportBackText: { color: '#A3A3A3', fontSize: 14, fontWeight: '700' },
+  reportSubmitBtn: {
+    flex: 2, padding: 14, borderRadius: 14, alignItems: 'center',
+    backgroundColor: '#FFA500',
+  },
+  reportSubmitDisabled: { backgroundColor: 'rgba(255,165,0,0.3)' },
+  reportSubmitText: { color: '#FFF', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  // Success state
+  reportSuccessContainer: {
+    alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20,
+  },
+  reportSuccessEmoji: { fontSize: 56, marginBottom: 16 },
+  reportSuccessTitle: { color: '#00FF9D', fontSize: 20, fontWeight: '800', marginBottom: 8 },
+  reportSuccessDesc: { color: '#A3A3A3', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  reportSuccessBtn: {
+    backgroundColor: '#8A2BE2', borderRadius: 14, paddingHorizontal: 40, paddingVertical: 14,
+  },
+  reportSuccessBtnText: { color: '#FFF', fontSize: 14, fontWeight: '800', letterSpacing: 2 },
 });

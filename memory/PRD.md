@@ -56,3 +56,4 @@ Application mobile de quiz compétitif en temps réel construite avec Expo (Reac
 - **09/03/2026** : Redesign page d'accueil (index.tsx) - Logo Duelo, tagline neon-glow pill, suppression icône éclair et footer
 - **09/03/2026** : Renommage `home.tsx` → `play.tsx` pour clarifier le rôle du fichier (page "Jouer")
 - Sessions précédentes : Icônes personnalisées, fix superposition pages, fix boucle profil, fix couleurs icônes inactives
+- **14/03/2026** : Ajout fonctionnalité "Signaler une erreur dans une question" après quiz (API backend + modal frontend sur écran résultats)

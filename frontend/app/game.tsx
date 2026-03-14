@@ -270,6 +270,10 @@ export default function GameScreen() {
     const bs = botScoreRef.current;
     const cc = correctCountRef.current;
     const ol = parseInt(params.opponentLevel || '1') || 1;
+    // Save questions for the report feature on results screen
+    try {
+      await AsyncStorage.setItem('duelo_last_quiz_questions', JSON.stringify(questions));
+    } catch {}
     router.replace(
       `/results?playerScore=${ps}&opponentScore=${bs}&opponentPseudo=${params.opponentPseudo}&category=${params.category}&userId=${userId}&isBot=${params.isBot}&correctCount=${cc}&opponentLevel=${ol}`
     );

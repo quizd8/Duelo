@@ -239,3 +239,22 @@ class UserThemeXP(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'theme_id', name='uq_user_theme_xp'),
     )
+
+
+
+class QuestionReport(Base):
+    __tablename__ = 'question_reports'
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), nullable=False, index=True)
+    question_id = Column(String(36), nullable=False, index=True)
+    question_text = Column(Text, nullable=True)
+    category = Column(String(100), nullable=True)
+    reason_type = Column(String(30), nullable=False)  # wrong_answer, unclear_question, typo, outdated, other
+    description = Column(Text, nullable=True)
+    status = Column(String(20), default='pending')  # pending, reviewed, resolved
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'question_id', name='uq_user_question_report'),
+    )
