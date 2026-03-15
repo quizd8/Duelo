@@ -8,7 +8,7 @@ import aiohttp
 import json
 import time
 
-BASE_URL = "https://duelo-matchmake.preview.emergentagent.com/api"
+BASE_URL = "https://duelo-admin-hub.preview.emergentagent.com/api"
 
 async def test_xp_edge_cases():
     """Test XP calculation with edge cases and verify streak bonuses."""

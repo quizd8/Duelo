@@ -13,7 +13,7 @@ import random
 from typing import Dict, Any, Optional
 
 # Base URL from frontend/.env
-BASE_URL = "https://duelo-matchmake.preview.emergentagent.com/api"
+BASE_URL = "https://duelo-admin-hub.preview.emergentagent.com/api"
 
 class SocialWallTester:
     def __init__(self):

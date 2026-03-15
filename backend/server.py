@@ -3787,6 +3787,267 @@ async def report_question(req: QuestionReportRequest, db: AsyncSession = Depends
     return {"success": True, "report_id": report.id}
 
 
+# ══════════════════════════════════════════════════════════════
+# ── ADMIN: Upload Themes CSV (replaces all existing themes) ──
+# ══════════════════════════════════════════════════════════════
+
+@api_router.post("/admin/upload-themes-csv")
+async def upload_themes_csv(request: Request, db: AsyncSession = Depends(get_db)):
+    """Upload a themes CSV that replaces all existing themes.
+    Expects JSON body: { password: str, themes_csv: str }
+    CSV columns: ID_Theme;Super_Categorie;Cluster;Nom_Public;Description;Couleur_Hex;Titre_Niv_1;Titre_Niv_10;Titre_Niv_20;Titre_Niv_35;Titre_Niv_50;URL_Icone
+    """
+    body = await request.json()
+    password = body.get("password", "")
+    themes_csv_text = body.get("themes_csv", "")
+
+    if password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Mot de passe administrateur incorrect")
+
+    if not themes_csv_text.strip():
+        raise HTTPException(status_code=400, detail="CSV vide")
+
+    # Delete all existing themes
+    await db.execute(text("DELETE FROM themes"))
+    await db.commit()
+
+    # Parse and import new themes
+    themes_reader = csv.DictReader(io.StringIO(themes_csv_text), delimiter=";")
+    themes_imported = 0
+    errors = []
+
+    for i, row in enumerate(themes_reader):
+        try:
+            theme_id = row.get("ID_Theme", "").strip()
+            if not theme_id:
+                errors.append(f"Ligne {i+2}: ID_Theme vide")
+                continue
+
+            theme = Theme(
+                id=theme_id,
+                super_category=row.get("Super_Categorie", "").strip(),
+                cluster=row.get("Cluster", "").strip(),
+                name=row.get("Nom_Public", "").strip(),
+                description=row.get("Description", "").strip(),
+                color_hex=row.get("Couleur_Hex", "").strip(),
+                title_lv1=row.get("Titre_Niv_1", "").strip(),
+                title_lv10=row.get("Titre_Niv_10", "").strip(),
+                title_lv20=row.get("Titre_Niv_20", "").strip(),
+                title_lv35=row.get("Titre_Niv_35", "").strip(),
+                title_lv50=row.get("Titre_Niv_50", "").strip(),
+                icon_url=row.get("URL_Icone", "").strip(),
+            )
+            db.add(theme)
+            themes_imported += 1
+        except Exception as e:
+            errors.append(f"Ligne {i+2}: {str(e)}")
+
+    await db.commit()
+
+    # Update question counts per theme
+    try:
+        result = await db.execute(select(Theme))
+        themes_list = result.scalars().all()
+        for t in themes_list:
+            count_res = await db.execute(
+                select(func.count(Question.id)).where(Question.category == t.id)
+            )
+            t.question_count = count_res.scalar() or 0
+        await db.commit()
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "themes_imported": themes_imported,
+        "errors": errors[:50],
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# ── ADMIN: Themes Overview (Super Categories → Clusters → Themes) ──
+# ══════════════════════════════════════════════════════════════
+
+@api_router.get("/admin/themes-overview")
+async def admin_themes_overview(db: AsyncSession = Depends(get_db)):
+    """Return hierarchical view: super categories → clusters → themes with IDs and question counts."""
+    result = await db.execute(
+        select(Theme).order_by(Theme.super_category, Theme.cluster, Theme.name)
+    )
+    all_themes = result.scalars().all()
+
+    # Build hierarchy
+    sc_map = {}
+    for t in all_themes:
+        sc = t.super_category or "UNKNOWN"
+        cl = t.cluster or "Sans cluster"
+        if sc not in sc_map:
+            meta = SUPER_CATEGORY_META.get(sc, {"icon": "?", "color": "#8A2BE2", "label": sc})
+            sc_map[sc] = {
+                "id": sc,
+                "label": meta["label"],
+                "icon": meta["icon"],
+                "color": meta["color"],
+                "clusters": {},
+                "total_themes": 0,
+                "total_questions": 0,
+            }
+        if cl not in sc_map[sc]["clusters"]:
+            sc_map[sc]["clusters"][cl] = {
+                "name": cl,
+                "icon": CLUSTER_ICONS.get(cl, ""),
+                "themes": [],
+                "total_questions": 0,
+            }
+        q_count = t.question_count or 0
+        sc_map[sc]["clusters"][cl]["themes"].append({
+            "id": t.id,
+            "name": t.name,
+            "description": t.description or "",
+            "question_count": q_count,
+            "color_hex": t.color_hex or "",
+        })
+        sc_map[sc]["clusters"][cl]["total_questions"] += q_count
+        sc_map[sc]["total_themes"] += 1
+        sc_map[sc]["total_questions"] += q_count
+
+    # Convert to list format
+    result_list = []
+    for sc_key, sc_data in sc_map.items():
+        clusters_list = []
+        for cl_name, cl_data in sc_data["clusters"].items():
+            clusters_list.append(cl_data)
+        sc_data["clusters"] = clusters_list
+        result_list.append(sc_data)
+
+    return {
+        "super_categories": result_list,
+        "totals": {
+            "super_categories": len(result_list),
+            "clusters": sum(len(sc["clusters"]) for sc in result_list),
+            "themes": sum(sc["total_themes"] for sc in result_list),
+            "questions": sum(sc["total_questions"] for sc in result_list),
+        }
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# ── ADMIN: Match Stats by Theme ──
+# ══════════════════════════════════════════════════════════════
+
+@api_router.get("/admin/match-stats-by-theme")
+async def admin_match_stats_by_theme(db: AsyncSession = Depends(get_db)):
+    """Return match counts per theme/category, ordered by popularity."""
+    result = await db.execute(
+        select(Match.category, func.count(Match.id).label("match_count"))
+        .group_by(Match.category)
+        .order_by(func.count(Match.id).desc())
+    )
+    rows = result.all()
+
+    # Get theme names
+    themes_res = await db.execute(select(Theme))
+    themes_map = {t.id: t.name for t in themes_res.scalars().all()}
+
+    stats = []
+    total_matches = 0
+    for cat, count in rows:
+        theme_name = themes_map.get(cat, CATEGORY_MAP.get(cat, cat))
+        stats.append({
+            "theme_id": cat,
+            "theme_name": theme_name,
+            "match_count": count,
+        })
+        total_matches += count
+
+    return {
+        "stats": stats,
+        "total_matches": total_matches,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# ── ADMIN: Question Reports ──
+# ══════════════════════════════════════════════════════════════
+
+@api_router.get("/admin/reports")
+async def admin_get_reports(
+    status: Optional[str] = None,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all question reports for admin review."""
+    query = select(QuestionReport).order_by(QuestionReport.created_at.desc())
+    if status:
+        query = query.where(QuestionReport.status == status)
+    query = query.limit(limit)
+
+    result = await db.execute(query)
+    reports = result.scalars().all()
+
+    # Get reporter pseudo
+    reports_data = []
+    for r in reports:
+        user_res = await db.execute(select(User).where(User.id == r.user_id))
+        user = user_res.scalar_one_or_none()
+        reports_data.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "user_pseudo": user.pseudo if user else "Inconnu",
+            "question_id": r.question_id,
+            "question_text": r.question_text or "",
+            "category": r.category or "",
+            "reason_type": r.reason_type,
+            "description": r.description or "",
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else "",
+        })
+
+    # Count by status
+    pending_res = await db.execute(
+        select(func.count(QuestionReport.id)).where(QuestionReport.status == "pending")
+    )
+    pending_count = pending_res.scalar() or 0
+
+    reviewed_res = await db.execute(
+        select(func.count(QuestionReport.id)).where(QuestionReport.status == "reviewed")
+    )
+    reviewed_count = reviewed_res.scalar() or 0
+
+    resolved_res = await db.execute(
+        select(func.count(QuestionReport.id)).where(QuestionReport.status == "resolved")
+    )
+    resolved_count = resolved_res.scalar() or 0
+
+    return {
+        "reports": reports_data,
+        "counts": {
+            "pending": pending_count,
+            "reviewed": reviewed_count,
+            "resolved": resolved_count,
+            "total": pending_count + reviewed_count + resolved_count,
+        }
+    }
+
+
+@api_router.post("/admin/reports/{report_id}/status")
+async def admin_update_report_status(report_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Update the status of a question report."""
+    body = await request.json()
+    new_status = body.get("status", "")
+    if new_status not in ("pending", "reviewed", "resolved"):
+        raise HTTPException(status_code=400, detail="Status invalide")
+
+    result = await db.execute(select(QuestionReport).where(QuestionReport.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Signalement introuvable")
+
+    report.status = new_status
+    await db.commit()
+    return {"success": True, "status": new_status}
+
+
 # ── App Setup ──
 
 app.include_router(api_router)

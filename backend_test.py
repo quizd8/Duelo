@@ -1,507 +1,248 @@
 #!/usr/bin/env python3
 """
-Backend testing script for CSV Question Import System.
-Tests the new admin APIs for bulk CSV import functionality.
+Backend Test Suite for Quiz Duelo Admin Panel APIs
+Testing the 5 new admin endpoints for themes and reports management.
 """
 
-import requests
+import asyncio
+import aiohttp
 import json
-import sys
 import time
-from typing import Dict, List, Any
 
-# Backend URL from frontend/.env - should use public endpoint
-BASE_URL = "https://duelo-matchmake.preview.emergentagent.com/api"
+# Backend URL from environment
+BACKEND_URL = "https://duelo-admin-hub.preview.emergentagent.com/api"
 ADMIN_PASSWORD = "Temporaire1!"
 
-class APITester:
-    def __init__(self):
-        self.base_url = BASE_URL
-        self.session = requests.Session()
-        self.test_results = []
-        
-    def log_test(self, test_name: str, success: bool, details: str = ""):
-        """Log a test result."""
-        status = "✅ PASS" if success else "❌ FAIL"
-        self.test_results.append({
-            "test": test_name,
-            "success": success,
-            "details": details
-        })
-        print(f"{status} {test_name}")
-        if details:
-            print(f"    Details: {details}")
+async def test_admin_endpoints():
+    """Test all 5 new admin panel endpoints."""
     
-    def make_request(self, method: str, endpoint: str, data: Dict = None) -> requests.Response:
-        """Make HTTP request to API endpoint."""
-        url = f"{self.base_url}{endpoint}"
-        headers = {"Content-Type": "application/json"}
-        
-        try:
-            if method.upper() == "GET":
-                return self.session.get(url, timeout=30)
-            elif method.upper() == "POST":
-                return self.session.post(url, json=data, headers=headers, timeout=30)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-        except Exception as e:
-            print(f"Request error: {e}")
-            raise
+    print("=" * 80)
+    print("🔧 QUIZ DUELO - ADMIN PANEL BACKEND TESTING")
+    print("=" * 80)
+    print(f"Backend URL: {BACKEND_URL}")
+    print(f"Admin Password: {ADMIN_PASSWORD}")
+    print()
 
-    def test_questions_stats_api(self):
-        """Test GET /api/admin/questions-stats endpoint."""
-        print("\n🔍 Testing Questions Stats API...")
+    async with aiohttp.ClientSession() as session:
         
-        try:
-            response = self.make_request("GET", "/admin/questions-stats")
-            
-            if response.status_code != 200:
-                self.log_test("Questions Stats API", False, f"Status code: {response.status_code}, Response: {response.text}")
-                return False
-            
-            data = response.json()
-            
-            # Validate response structure
-            required_fields = ["total_questions", "categories", "batches"]
-            for field in required_fields:
-                if field not in data:
-                    self.log_test("Questions Stats API", False, f"Missing field: {field}")
-                    return False
-            
-            # Validate categories structure
-            if isinstance(data["categories"], list):
-                for cat in data["categories"]:
-                    if not isinstance(cat, dict) or "category" not in cat or "count" not in cat:
-                        self.log_test("Questions Stats API", False, "Invalid category structure")
-                        return False
-            
-            # Validate batches structure
-            if isinstance(data["batches"], list):
-                for batch in data["batches"]:
-                    if not isinstance(batch, dict) or "batch" not in batch or "count" not in batch:
-                        self.log_test("Questions Stats API", False, "Invalid batch structure")
-                        return False
-            
-            self.log_test("Questions Stats API", True, f"Total: {data['total_questions']}, Categories: {len(data['categories'])}, Batches: {len(data['batches'])}")
-            return True
-            
-        except Exception as e:
-            self.log_test("Questions Stats API", False, f"Exception: {str(e)}")
-            return False
-
-    def test_csv_upload_valid_data(self):
-        """Test POST /api/admin/upload-csv with valid data."""
-        print("\n📤 Testing CSV Upload with Valid Data...")
+        # Test 1: Upload Themes CSV
+        print("1️⃣ TESTING POST /api/admin/upload-themes-csv")
+        print("-" * 50)
         
-        test_questions = [
-            {
-                "id": "CSV_TEST_001",
-                "category": "TEST_CAT",
-                "question_text": "Test question 1?",
-                "option_a": "Answer A",
-                "option_b": "Answer B",
-                "option_c": "Answer C",
-                "option_d": "Answer D",
-                "correct_option": "B",
-                "difficulty": "easy",
-                "angle": "test_angle",
-                "batch": "test_batch_1"
-            },
-            {
-                "id": "CSV_TEST_002",
-                "category": "TEST_CAT",
-                "question_text": "Test question 2?",
-                "option_a": "Option A",
-                "option_b": "Option B",
-                "option_c": "Option C",
-                "option_d": "Option D",
-                "correct_option": "D",
-                "difficulty": "hard",
-                "angle": "",
-                "batch": "test_batch_1"
-            }
-        ]
+        test_themes_csv = "ID_Theme;Super_Categorie;Cluster;Nom_Public;Description;Couleur_Hex;Titre_Niv_1;Titre_Niv_10;Titre_Niv_20;Titre_Niv_35;Titre_Niv_50;URL_Icone\nTEST_001;TEST_SC;TEST_CL;Test Theme;Test description;#FF0000;Niv1;Niv10;Niv20;Niv35;Niv50;http://test.com"
         
-        payload = {
+        upload_data = {
             "password": ADMIN_PASSWORD,
-            "questions": test_questions
+            "themes_csv": test_themes_csv
         }
         
         try:
-            response = self.make_request("POST", "/admin/upload-csv", payload)
-            
-            if response.status_code != 200:
-                self.log_test("CSV Upload Valid Data", False, f"Status code: {response.status_code}, Response: {response.text}")
-                return False
-            
-            data = response.json()
-            
-            # Expected response structure
-            expected_fields = ["success", "imported", "duplicates", "errors", "total_processed"]
-            for field in expected_fields:
-                if field not in data:
-                    self.log_test("CSV Upload Valid Data", False, f"Missing field: {field}")
-                    return False
-            
-            # Check if questions were imported
-            if not data["success"]:
-                self.log_test("CSV Upload Valid Data", False, "success=False in response")
-                return False
+            async with session.post(f"{BACKEND_URL}/admin/upload-themes-csv", json=upload_data) as resp:
+                print(f"Status: {resp.status}")
+                result = await resp.json()
+                print(f"Response: {json.dumps(result, indent=2)}")
                 
-            if data["imported"] != 2:
-                self.log_test("CSV Upload Valid Data", False, f"Expected imported=2, got {data['imported']}")
-                return False
-            
-            if data["duplicates"] != 0:
-                self.log_test("CSV Upload Valid Data", False, f"Expected duplicates=0, got {data['duplicates']}")
-                return False
-            
-            if len(data["errors"]) != 0:
-                self.log_test("CSV Upload Valid Data", False, f"Expected 0 errors, got {len(data['errors'])}: {data['errors']}")
-                return False
-            
-            if data["total_processed"] != 2:
-                self.log_test("CSV Upload Valid Data", False, f"Expected total_processed=2, got {data['total_processed']}")
-                return False
-            
-            self.log_test("CSV Upload Valid Data", True, f"Imported: {data['imported']}, Duplicates: {data['duplicates']}, Errors: {len(data['errors'])}")
-            return True
-            
+                if resp.status == 200:
+                    if result.get("success") and result.get("themes_imported") == 1:
+                        print("✅ PASSED: Themes CSV upload successful")
+                    else:
+                        print("❌ FAILED: Unexpected response structure")
+                else:
+                    print(f"❌ FAILED: HTTP {resp.status}")
         except Exception as e:
-            self.log_test("CSV Upload Valid Data", False, f"Exception: {str(e)}")
-            return False
+            print(f"❌ FAILED: Exception {str(e)}")
+        
+        print()
 
-    def test_csv_upload_duplicate_handling(self):
-        """Test duplicate handling by sending the same questions again."""
-        print("\n🔁 Testing CSV Upload Duplicate Handling...")
-        
-        # Use same test questions as before
-        test_questions = [
-            {
-                "id": "CSV_TEST_001",
-                "category": "TEST_CAT",
-                "question_text": "Test question 1?",
-                "option_a": "Answer A",
-                "option_b": "Answer B",
-                "option_c": "Answer C",
-                "option_d": "Answer D",
-                "correct_option": "B",
-                "difficulty": "easy",
-                "angle": "test_angle",
-                "batch": "test_batch_1"
-            },
-            {
-                "id": "CSV_TEST_002",
-                "category": "TEST_CAT",
-                "question_text": "Test question 2?",
-                "option_a": "Option A",
-                "option_b": "Option B",
-                "option_c": "Option C",
-                "option_d": "Option D",
-                "correct_option": "D",
-                "difficulty": "hard",
-                "angle": "",
-                "batch": "test_batch_1"
-            }
-        ]
-        
-        payload = {
-            "password": ADMIN_PASSWORD,
-            "questions": test_questions
-        }
+        # Test 2: Get Themes Overview  
+        print("2️⃣ TESTING GET /api/admin/themes-overview")
+        print("-" * 50)
         
         try:
-            response = self.make_request("POST", "/admin/upload-csv", payload)
-            
-            if response.status_code != 200:
-                self.log_test("CSV Upload Duplicate Handling", False, f"Status code: {response.status_code}, Response: {response.text}")
-                return False
-            
-            data = response.json()
-            
-            # Should detect duplicates
-            if not data["success"]:
-                self.log_test("CSV Upload Duplicate Handling", False, "success=False in response")
-                return False
+            async with session.get(f"{BACKEND_URL}/admin/themes-overview") as resp:
+                print(f"Status: {resp.status}")
+                result = await resp.json()
+                print(f"Response structure: {list(result.keys())}")
                 
-            if data["imported"] != 0:
-                self.log_test("CSV Upload Duplicate Handling", False, f"Expected imported=0, got {data['imported']}")
-                return False
-            
-            if data["duplicates"] != 2:
-                self.log_test("CSV Upload Duplicate Handling", False, f"Expected duplicates=2, got {data['duplicates']}")
-                return False
-            
-            if data["total_processed"] != 2:
-                self.log_test("CSV Upload Duplicate Handling", False, f"Expected total_processed=2, got {data['total_processed']}")
-                return False
-            
-            self.log_test("CSV Upload Duplicate Handling", True, f"Correctly detected {data['duplicates']} duplicates")
-            return True
-            
+                if resp.status == 200:
+                    if "super_categories" in result and "totals" in result:
+                        super_cats = result["super_categories"]
+                        totals = result["totals"]
+                        print(f"Super categories count: {len(super_cats)}")
+                        print(f"Totals: {totals}")
+                        
+                        # Check structure of first super category
+                        if super_cats:
+                            first_sc = super_cats[0]
+                            print(f"First super category structure: {list(first_sc.keys())}")
+                            
+                            if "clusters" in first_sc and first_sc["clusters"]:
+                                first_cluster = first_sc["clusters"][0]
+                                print(f"First cluster structure: {list(first_cluster.keys())}")
+                                
+                                if "themes" in first_cluster and first_cluster["themes"]:
+                                    print(f"First theme structure: {list(first_cluster['themes'][0].keys())}")
+                        
+                        print("✅ PASSED: Themes overview returned hierarchical structure")
+                    else:
+                        print("❌ FAILED: Missing required fields in response")
+                else:
+                    print(f"❌ FAILED: HTTP {resp.status}")
         except Exception as e:
-            self.log_test("CSV Upload Duplicate Handling", False, f"Exception: {str(e)}")
-            return False
+            print(f"❌ FAILED: Exception {str(e)}")
+            
+        print()
 
-    def test_csv_upload_invalid_data(self):
-        """Test CSV upload with invalid data."""
-        print("\n⚠️  Testing CSV Upload with Invalid Data...")
-        
-        invalid_questions = [
-            {
-                # Missing question_text
-                "category": "TEST",
-                "question_text": "",
-                "option_a": "A",
-                "option_b": "B",
-                "option_c": "C",
-                "option_d": "D",
-                "correct_option": "A"
-            },
-            {
-                # Missing category
-                "category": "",
-                "question_text": "Some question?",
-                "option_a": "A",
-                "option_b": "B",
-                "option_c": "C",
-                "option_d": "D",
-                "correct_option": "A"
-            },
-            {
-                # Invalid correct_option
-                "category": "TEST",
-                "question_text": "Some question?",
-                "option_a": "A",
-                "option_b": "B",
-                "option_c": "C",
-                "option_d": "D",
-                "correct_option": "X"
-            }
-        ]
-        
-        payload = {
-            "password": ADMIN_PASSWORD,
-            "questions": invalid_questions
-        }
+        # Test 3: Get Match Stats by Theme
+        print("3️⃣ TESTING GET /api/admin/match-stats-by-theme")
+        print("-" * 50)
         
         try:
-            response = self.make_request("POST", "/admin/upload-csv", payload)
-            
-            if response.status_code != 200:
-                self.log_test("CSV Upload Invalid Data", False, f"Status code: {response.status_code}, Response: {response.text}")
-                return False
-            
-            data = response.json()
-            
-            # Should have errors but still return success=True
-            if not data["success"]:
-                self.log_test("CSV Upload Invalid Data", False, "success=False in response")
-                return False
+            async with session.get(f"{BACKEND_URL}/admin/match-stats-by-theme") as resp:
+                print(f"Status: {resp.status}")
+                result = await resp.json()
+                print(f"Response structure: {list(result.keys())}")
                 
-            if data["imported"] != 0:
-                self.log_test("CSV Upload Invalid Data", False, f"Expected imported=0, got {data['imported']}")
-                return False
-            
-            if data["duplicates"] != 0:
-                self.log_test("CSV Upload Invalid Data", False, f"Expected duplicates=0, got {data['duplicates']}")
-                return False
-            
-            if len(data["errors"]) != 3:
-                self.log_test("CSV Upload Invalid Data", False, f"Expected 3 errors, got {len(data['errors'])}: {data['errors']}")
-                return False
-            
-            if data["total_processed"] != 3:
-                self.log_test("CSV Upload Invalid Data", False, f"Expected total_processed=3, got {data['total_processed']}")
-                return False
-            
-            self.log_test("CSV Upload Invalid Data", True, f"Correctly handled {len(data['errors'])} errors")
-            return True
-            
+                if resp.status == 200:
+                    if "stats" in result and "total_matches" in result:
+                        stats = result["stats"] 
+                        total = result["total_matches"]
+                        print(f"Stats entries count: {len(stats)}")
+                        print(f"Total matches: {total}")
+                        
+                        # Check structure of first stat entry
+                        if stats:
+                            first_stat = stats[0]
+                            expected_fields = ["theme_id", "theme_name", "match_count"]
+                            missing_fields = [f for f in expected_fields if f not in first_stat]
+                            
+                            print(f"First stat entry: {first_stat}")
+                            
+                            if not missing_fields:
+                                print("✅ PASSED: Match stats returned correct structure")
+                            else:
+                                print(f"❌ FAILED: Missing fields {missing_fields}")
+                        else:
+                            print("✅ PASSED: Match stats returned (empty but valid)")
+                    else:
+                        print("❌ FAILED: Missing required fields in response")
+                else:
+                    print(f"❌ FAILED: HTTP {resp.status}")
         except Exception as e:
-            self.log_test("CSV Upload Invalid Data", False, f"Exception: {str(e)}")
-            return False
+            print(f"❌ FAILED: Exception {str(e)}")
+            
+        print()
 
-    def test_csv_upload_wrong_password(self):
-        """Test CSV upload with wrong password."""
-        print("\n🔒 Testing CSV Upload with Wrong Password...")
-        
-        payload = {
-            "password": "wrong",
-            "questions": [
-                {
-                    "category": "TEST",
-                    "question_text": "Test?",
-                    "option_a": "A",
-                    "option_b": "B",
-                    "option_c": "C",
-                    "option_d": "D",
-                    "correct_option": "A"
-                }
-            ]
-        }
+        # Test 4: Get Reports
+        print("4️⃣ TESTING GET /api/admin/reports")
+        print("-" * 50)
         
         try:
-            response = self.make_request("POST", "/admin/upload-csv", payload)
-            
-            if response.status_code == 403:
-                self.log_test("CSV Upload Wrong Password", True, "Correctly returned 403 Forbidden")
-                return True
-            else:
-                self.log_test("CSV Upload Wrong Password", False, f"Expected 403, got {response.status_code}")
-                return False
-            
-        except Exception as e:
-            self.log_test("CSV Upload Wrong Password", False, f"Exception: {str(e)}")
-            return False
-
-    def test_csv_upload_auto_id_generation(self):
-        """Test CSV upload with auto ID generation."""
-        print("\n🔢 Testing CSV Upload Auto-ID Generation...")
-        
-        test_questions = [
-            {
-                # No id field - should auto-generate
-                "category": "TEST_AUTO",
-                "question_text": "Auto ID question?",
-                "option_a": "A1",
-                "option_b": "B1",
-                "option_c": "C1",
-                "option_d": "D1",
-                "correct_option": "C",
-                "difficulty": "medium"
-            }
-        ]
-        
-        payload = {
-            "password": ADMIN_PASSWORD,
-            "questions": test_questions
-        }
-        
-        try:
-            response = self.make_request("POST", "/admin/upload-csv", payload)
-            
-            if response.status_code != 200:
-                self.log_test("CSV Upload Auto-ID", False, f"Status code: {response.status_code}, Response: {response.text}")
-                return False
-            
-            data = response.json()
-            
-            if not data["success"]:
-                self.log_test("CSV Upload Auto-ID", False, "success=False in response")
-                return False
+            # Test basic reports endpoint
+            async with session.get(f"{BACKEND_URL}/admin/reports") as resp:
+                print(f"Status: {resp.status}")
+                result = await resp.json()
+                print(f"Response structure: {list(result.keys())}")
                 
-            if data["imported"] != 1:
-                self.log_test("CSV Upload Auto-ID", False, f"Expected imported=1, got {data['imported']}")
-                return False
-            
-            self.log_test("CSV Upload Auto-ID", True, "Auto-generated ID and imported question")
-            return True
-            
+                if resp.status == 200:
+                    if "reports" in result and "counts" in result:
+                        reports = result["reports"]
+                        counts = result["counts"]
+                        print(f"Reports count: {len(reports)}")
+                        print(f"Counts: {counts}")
+                        
+                        # Check structure
+                        if reports:
+                            first_report = reports[0]
+                            expected_fields = ["id", "user_id", "user_pseudo", "question_id", "question_text", "category", "reason_type", "description", "status", "created_at"]
+                            missing_fields = [f for f in expected_fields if f not in first_report]
+                            
+                            print(f"First report structure: {list(first_report.keys())}")
+                            
+                            if not missing_fields:
+                                print("✅ PASSED: Reports returned correct structure")
+                            else:
+                                print(f"❌ FAILED: Missing fields {missing_fields}")
+                        else:
+                            print("✅ PASSED: Reports returned (empty but valid)")
+                    else:
+                        print("❌ FAILED: Missing required fields in response") 
+                else:
+                    print(f"❌ FAILED: HTTP {resp.status}")
+                    
+            # Test with status filter
+            print("\n  Testing with ?status=pending filter...")
+            async with session.get(f"{BACKEND_URL}/admin/reports?status=pending") as resp:
+                print(f"  Status: {resp.status}")
+                if resp.status == 200:
+                    result = await resp.json()
+                    print(f"  Pending reports: {len(result.get('reports', []))}")
+                    print("✅ PASSED: Status filter working")
+                else:
+                    print(f"❌ FAILED: Status filter HTTP {resp.status}")
+                    
         except Exception as e:
-            self.log_test("CSV Upload Auto-ID", False, f"Exception: {str(e)}")
-            return False
+            print(f"❌ FAILED: Exception {str(e)}")
+            
+        print()
 
-    def test_questions_stats_after_imports(self):
-        """Test questions-stats endpoint after all imports."""
-        print("\n📊 Testing Questions Stats After Imports...")
+        # Test 5: Update Report Status  
+        print("5️⃣ TESTING POST /api/admin/reports/{report_id}/status")
+        print("-" * 50)
         
         try:
-            response = self.make_request("GET", "/admin/questions-stats")
-            
-            if response.status_code != 200:
-                self.log_test("Questions Stats After Imports", False, f"Status code: {response.status_code}, Response: {response.text}")
-                return False
-            
-            data = response.json()
-            
-            # Should show updated counts
-            test_cat_found = False
-            test_auto_found = False
-            
-            for cat in data["categories"]:
-                if cat["category"] == "TEST_CAT" and cat["count"] >= 2:
-                    test_cat_found = True
-                elif cat["category"] == "TEST_AUTO" and cat["count"] >= 1:
-                    test_auto_found = True
-            
-            if not test_cat_found:
-                self.log_test("Questions Stats After Imports", False, "TEST_CAT category not found or count < 2")
-                return False
-            
-            if not test_auto_found:
-                self.log_test("Questions Stats After Imports", False, "TEST_AUTO category not found or count < 1")
-                return False
-            
-            # Check for batches
-            test_batch_found = False
-            for batch in data["batches"]:
-                if batch["batch"] == "test_batch_1" and batch["count"] >= 2:
-                    test_batch_found = True
-            
-            if not test_batch_found:
-                self.log_test("Questions Stats After Imports", False, "test_batch_1 batch not found or count < 2")
-                return False
-            
-            self.log_test("Questions Stats After Imports", True, f"Updated counts - Total: {data['total_questions']}, TEST_CAT and TEST_AUTO categories found, test_batch_1 found")
-            return True
-            
+            # First, get a report to update
+            async with session.get(f"{BACKEND_URL}/admin/reports") as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    reports = result.get("reports", [])
+                    
+                    if reports:
+                        # Use first report
+                        report_id = reports[0]["id"]
+                        current_status = reports[0]["status"] 
+                        new_status = "reviewed" if current_status != "reviewed" else "pending"
+                        
+                        print(f"Testing with report ID: {report_id}")
+                        print(f"Current status: {current_status} -> New status: {new_status}")
+                        
+                        update_data = {"status": new_status}
+                        
+                        async with session.post(f"{BACKEND_URL}/admin/reports/{report_id}/status", json=update_data) as resp:
+                            print(f"Status: {resp.status}")
+                            result = await resp.json()
+                            print(f"Response: {result}")
+                            
+                            if resp.status == 200:
+                                if result.get("success") and result.get("status") == new_status:
+                                    print("✅ PASSED: Report status update successful")
+                                else:
+                                    print("❌ FAILED: Unexpected response structure")
+                            else:
+                                print(f"❌ FAILED: HTTP {resp.status}")
+                    else:
+                        # Test with fake report ID to check error handling
+                        print("No reports found, testing error handling with fake ID...")
+                        fake_report_id = "fake-report-id"
+                        update_data = {"status": "reviewed"}
+                        
+                        async with session.post(f"{BACKEND_URL}/admin/reports/{fake_report_id}/status", json=update_data) as resp:
+                            print(f"Status: {resp.status}")
+                            if resp.status == 404:
+                                print("✅ PASSED: Error handling working (404 for non-existent report)")
+                            else:
+                                print(f"❌ FAILED: Expected 404, got {resp.status}")
+                else:
+                    print(f"❌ FAILED: Could not fetch reports for testing (HTTP {resp.status})")
+                    
         except Exception as e:
-            self.log_test("Questions Stats After Imports", False, f"Exception: {str(e)}")
-            return False
+            print(f"❌ FAILED: Exception {str(e)}")
 
-    def run_all_tests(self):
-        """Run all CSV import system tests."""
-        print(f"🚀 Starting CSV Question Import System Tests...")
-        print(f"Backend URL: {self.base_url}")
-        print(f"Admin Password: {ADMIN_PASSWORD}")
-        
-        # Run tests in sequence
-        tests = [
-            self.test_questions_stats_api,
-            self.test_csv_upload_valid_data,
-            self.test_csv_upload_duplicate_handling,
-            self.test_csv_upload_invalid_data,
-            self.test_csv_upload_wrong_password,
-            self.test_csv_upload_auto_id_generation,
-            self.test_questions_stats_after_imports,
-        ]
-        
-        passed = 0
-        total = len(tests)
-        
-        for test in tests:
-            if test():
-                passed += 1
-            time.sleep(0.5)  # Small delay between tests
-        
-        # Summary
-        print(f"\n{'='*60}")
-        print(f"📋 CSV Import System Test Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("✅ All tests PASSED! CSV import system is working correctly.")
-            return True
-        else:
-            print("❌ Some tests FAILED! Check details above.")
-            
-            # Show failed tests
-            print("\n Failed tests:")
-            for result in self.test_results:
-                if not result["success"]:
-                    print(f"   ❌ {result['test']}: {result['details']}")
-            
-            return False
+        print()
+        print("=" * 80)
+        print("🏁 ADMIN PANEL BACKEND TESTING COMPLETE")
+        print("=" * 80)
 
-def main():
-    """Main test runner."""
-    print("CSV Question Import System Backend Testing")
-    print("=" * 60)
-    
-    tester = APITester()
-    success = tester.run_all_tests()
-    
-    sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(test_admin_endpoints())

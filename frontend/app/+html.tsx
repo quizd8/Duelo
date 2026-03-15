@@ -42,6 +42,25 @@ export default function Root({ children }: { children: React.ReactNode }) {
             pointer-events: none;
             z-index: 0;
           }
+          [data-testid="admin-bg"], [data-testid="admin-bg"] > div {
+            background-color: #000000 !important;
+          }
+          #admin-bg,
+          #root #admin-bg,
+          div#admin-bg {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            z-index: 9999 !important;
+            background: #000000 !important;
+            background-color: #000000 !important;
+          }
+          #admin-bg > div,
+          #root #admin-bg > div {
+            background-color: #000000 !important;
+          }
         `}} />
       </head>
       <body>{children}</body>

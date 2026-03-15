@@ -686,6 +686,8 @@ agent_communication:
       message: "CSV QUESTION IMPORT SYSTEM - NEW FEATURE. Implemented: 1) Backend: Updated Question model with new columns (option_a, option_b, option_c, option_d, angle, batch). Added POST /api/admin/upload-csv endpoint that accepts parsed CSV data as JSON with admin password verification, validates rows, maps columns, does bulk insert with both individual columns AND JSON options array for backward compatibility. Added GET /api/admin/questions-stats to show DB statistics. 2) Frontend: Created admin.tsx page with password-protected admin panel, CSV file upload via expo-document-picker, client-side PapaParse parsing with semicolon delimiter, preview of parsed questions, error display, and bulk import with results. Page accessible from Profile > Administration. Please test: 1) POST /api/admin/upload-csv with password='Temporaire1!' and questions array containing test rows. 2) GET /api/admin/questions-stats. 3) Test duplicate handling. 4) Test invalid data handling."
     - agent: "testing"
       message: "📊 CSV QUESTION IMPORT SYSTEM BACKEND TESTING COMPLETE - ALL 2 ADMIN APIS FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications with admin password 'Temporaire1!': 1) Questions Stats API (GET /api/admin/questions-stats) - Returns proper structure with total_questions (29917 initially, 29920 after imports), categories array with {category, count} format (68 categories), and batches array with {batch, count} format. After imports correctly showed new TEST_CAT (2 questions), TEST_AUTO (1 question) categories and test_batch_1 batch (2 questions). API properly aggregates database statistics. 2) CSV Upload API (POST /api/admin/upload-csv) - Comprehensive validation testing: Valid data import (2 questions imported successfully), duplicate handling (correctly detected 2 duplicates on re-import), invalid data validation (properly rejected 3 questions with missing fields/invalid correct_option), wrong password security (403 Forbidden), auto-ID generation (successfully generated UUID for question without id field). Response format matches specification exactly: {success: true/false, imported: N, duplicates: N, errors: [], total_processed: N}. Bulk insert with batch commits (200 per batch) working correctly. Field validation robust for question_text, category, options A-D, correct_option A-D mapping to 0-3 integers. Password protection active. All error scenarios handled gracefully. BOTH CSV IMPORT ADMIN APIS READY FOR PRODUCTION USE."
+    - agent: "testing"
+      message: "🔧 ADMIN PANEL BACKEND TESTING COMPLETE - ALL 5 NEW ADMIN APIS FULLY FUNCTIONAL ✅ Comprehensive testing performed following exact review request specifications with admin password 'Temporaire1!': 1) Themes CSV Upload API (POST /api/admin/upload-themes-csv) - Fixed semicolon delimiter parsing issue. Successfully tests valid CSV upload (success: true, themes_imported: 1), password protection (403 for wrong password), empty CSV validation (400 error), theme data persistence confirmed. CSV format working: ID_Theme;Super_Categorie;Cluster;Nom_Public;Description;Couleur_Hex;Titre_Niv_1;Titre_Niv_10;Titre_Niv_20;Titre_Niv_35;Titre_Niv_50;URL_Icone. 2) Themes Overview API (GET /api/admin/themes-overview) - Returns hierarchical structure with super_categories and totals. Proper nesting: super_category > clusters > themes. All field validation complete. 3) Match Stats by Theme API (GET /api/admin/match-stats-by-theme) - Returns stats array with theme_id, theme_name, match_count. Successfully tested with 4 entries, 20 total matches. 4) Question Reports API (GET /api/admin/reports) - Returns reports array and counts object. Status filtering working (?status=pending). Proper report structure with all required fields. 5) Update Report Status API (POST /api/admin/reports/{report_id}/status) - Successfully updates status with validation. Invalid status (400), non-existent ID (404) properly handled. Status changes persist correctly. Edge case testing completed: password validation, empty data handling, invalid statuses, non-existent IDs, data persistence, filtering. ALL NEW ADMIN PANEL APIS READY FOR PRODUCTION USE."
 
   - task: "CSV Question Upload API"
     implemented: true
@@ -728,4 +730,64 @@ agent_communication:
         - working: true
           agent: "main"
           comment: "Created admin.tsx with password protection, CSV file picker, PapaParse client-side parsing (semicolon separator), preview of parsed questions, error handling, and import button. Accessible from Profile > Administration."
+
+  - task: "Admin Themes CSV Upload API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Comprehensive testing complete. POST /api/admin/upload-themes-csv fully functional with admin password 'Temporaire1!'. Fixed CSV parsing to use semicolon delimiter (delimiter=';'). Successfully tests: 1) Valid CSV upload with proper structure validation - returns {success: true, themes_imported: 1, errors: []}. 2) Password protection working - wrong password returns 403 Forbidden. 3) Empty CSV validation - returns 400 with 'CSV vide' error. 4) Theme data persistence confirmed in database. CSV format validated: ID_Theme;Super_Categorie;Cluster;Nom_Public;Description;Couleur_Hex;Titre_Niv_1;Titre_Niv_10;Titre_Niv_20;Titre_Niv_35;Titre_Niv_50;URL_Icone. API correctly deletes existing themes and imports new ones with bulk commit. Admin Themes CSV Upload API fully functional and production-ready."
+
+  - task: "Admin Themes Overview API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Comprehensive testing complete. GET /api/admin/themes-overview fully functional. Returns hierarchical structure with super_categories array and totals object. Response structure validated: {super_categories: [...], totals: {super_categories: N, clusters: N, themes: N, questions: N}}. Each super category contains: {id, label, icon, color, clusters, total_themes, total_questions}. Each cluster contains: {name, icon, themes, total_questions}. Each theme contains: {id, name, description, question_count, color_hex}. Successfully tested with uploaded test theme showing proper hierarchy: TEST_SC > TEST_CL > Test Theme. Themes Overview API fully functional and production-ready."
+
+  - task: "Admin Match Stats by Theme API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Comprehensive testing complete. GET /api/admin/match-stats-by-theme fully functional. Returns match statistics with proper structure: {stats: [...], total_matches: N}. Each stats entry contains: {theme_id, theme_name, match_count}. Successfully tested with 4 stats entries and 20 total matches. Most popular theme: 'series_tv' with 15 matches. Theme names correctly resolved from CATEGORY_MAP and themes database. Statistics properly aggregated and ordered by match count descending. Match Stats API fully functional and production-ready."
+
+  - task: "Admin Question Reports API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Comprehensive testing complete. GET /api/admin/reports fully functional with optional status filtering. Returns proper structure: {reports: [...], counts: {pending: N, reviewed: N, resolved: N, total: N}}. Each report contains: {id, user_id, user_pseudo, question_id, question_text, category, reason_type, description, status, created_at}. Successfully tested with 2 existing reports, status counts working correctly (pending: 2, reviewed: 0, resolved: 0). Status filtering tested: ?status=pending returns only pending reports. User pseudo correctly resolved from database. Reports ordered by created_at descending. Question Reports API fully functional and production-ready."
+
+  - task: "Admin Update Report Status API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Comprehensive testing complete. POST /api/admin/reports/{report_id}/status fully functional with proper validation. Successfully updates report status and returns {success: true, status: 'new_status'}. Validation tested: 1) Valid status values (pending, reviewed, resolved) working correctly. 2) Invalid status values rejected with 400 'Status invalide'. 3) Non-existent report ID rejected with 404 'Signalement introuvable'. Status changes persist correctly in database. Successfully tested status toggle: pending → reviewed → pending. Update Report Status API fully functional and production-ready."
 
