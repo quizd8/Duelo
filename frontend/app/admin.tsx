@@ -33,12 +33,6 @@ type ImportResult = {
   total_processed: number;
 };
 
-type QuestionStats = {
-  total_questions: number;
-  categories: { category: string; count: number }[];
-  batches: { batch: string; count: number }[];
-};
-
 type ThemeItem = {
   id: string;
   name: string;
@@ -134,8 +128,6 @@ export default function AdminScreen() {
   const [csvColumns, setCsvColumns] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  const [stats, setStats] = useState<QuestionStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
 
   // Themes state
   const [themesOverview, setThemesOverview] = useState<ThemesOverview | null>(null);
@@ -164,7 +156,6 @@ export default function AdminScreen() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadStats();
       loadThemesOverview();
       loadMatchStats();
       loadReports();
@@ -172,19 +163,6 @@ export default function AdminScreen() {
   }, [isAuthenticated]);
 
   // ── Loaders ──
-
-  const loadStats = async () => {
-    setLoadingStats(true);
-    try {
-      const res = await fetch(`${API_URL}/api/admin/questions-stats`);
-      const data = await res.json();
-      setStats(data);
-    } catch (e) {
-      console.error('Error loading stats:', e);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
 
   const loadThemesOverview = async () => {
     setLoadingThemes(true);
@@ -232,7 +210,7 @@ export default function AdminScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    if (activeTab === 0) await loadStats();
+    if (activeTab === 0) { /* Questions tab - nothing to refresh */ }
     else if (activeTab === 1) await loadThemesOverview();
     else if (activeTab === 2) await loadMatchStats();
     else if (activeTab === 3) await loadReports();
@@ -359,7 +337,7 @@ export default function AdminScreen() {
         body: JSON.stringify({ password, questions: parsedRows }),
       });
       const data = await res.json();
-      if (res.ok) { setImportResult(data); loadStats(); }
+      if (res.ok) { setImportResult(data); loadThemesOverview(); }
       else { Alert.alert('Erreur', data.detail || 'Erreur lors de l\'importation'); }
     } catch (e: any) {
       Alert.alert('Erreur', `Erreur reseau: ${e.message || e}`);
@@ -497,27 +475,6 @@ export default function AdminScreen() {
 
   const renderQuestionsTab = () => (
     <View>
-      {/* Stats Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Statistiques Questions</Text>
-        {loadingStats ? (
-          <ActivityIndicator color="#8A2BE2" style={{ marginVertical: 12 }} />
-        ) : stats ? (
-          <View>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>Total questions</Text>
-              <Text style={styles.statValue}>{stats.total_questions}</Text>
-            </View>
-            {stats.categories.slice(0, 15).map((cat, i) => (
-              <View key={i} style={styles.statRow}>
-                <Text style={styles.statLabel} numberOfLines={1}>{cat.category}</Text>
-                <Text style={styles.statValueSmall}>{cat.count}</Text>
-              </View>
-            ))}
-          </View>
-        ) : <Text style={styles.noDataText}>Impossible de charger les stats</Text>}
-      </View>
-
       {/* Upload Section */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Importer des questions CSV</Text>
