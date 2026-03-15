@@ -8,7 +8,7 @@ import asyncio
 import aiohttp
 import json
 
-BACKEND_URL = "https://duelo-admin-hub.preview.emergentagent.com/api"
+BACKEND_URL = "https://theme-stats-hub-1.preview.emergentagent.com/api"
 ADMIN_PASSWORD = "Temporaire1!"
 
 async def test_edge_cases():
