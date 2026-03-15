@@ -22,6 +22,7 @@ type QuestionRow = {
   correct_option: string;
   difficulty?: string;
   angle?: string;
+  angle_num?: string;
   batch?: string;
 };
 
@@ -275,11 +276,31 @@ export default function AdminScreen() {
   const parseCSV = (csvText: string) => {
     const errors: string[] = [];
     const validRows: QuestionRow[] = [];
+
+    // Map French column names to internal names
+    const COLUMN_MAP: Record<string, string> = {
+      'id': 'id',
+      'catégorie': 'category', 'categorie': 'category', 'category': 'category',
+      'question': 'question_text', 'question_text': 'question_text',
+      'rep_a': 'option_a', 'option_a': 'option_a',
+      'rep_b': 'option_b', 'option_b': 'option_b',
+      'rep_c': 'option_c', 'option_c': 'option_c',
+      'rep_d': 'option_d', 'option_d': 'option_d',
+      'bonne_rep': 'correct_option', 'correct_option': 'correct_option',
+      'difficulté': 'difficulty', 'difficulte': 'difficulty', 'difficulty': 'difficulty',
+      'angle': 'angle',
+      'angle_num': 'angle_num',
+      'batch': 'batch',
+    };
+
     const parsed = Papa.parse(csvText, {
       delimiter: ';',
       header: true,
       skipEmptyLines: true,
-      transformHeader: (header: string) => header.trim().toLowerCase().replace(/\s+/g, '_'),
+      transformHeader: (header: string) => {
+        const normalized = header.trim().toLowerCase().replace(/\s+/g, '_');
+        return COLUMN_MAP[normalized] || normalized;
+      },
     });
     if (parsed.errors && parsed.errors.length > 0) {
       parsed.errors.forEach((err: any) => {
@@ -313,7 +334,8 @@ export default function AdminScreen() {
           category, question_text: questionText,
           option_a: optA, option_b: optB, option_c: optC, option_d: optD,
           correct_option: correct, difficulty: (row.difficulty || 'medium').trim(),
-          angle: (row.angle || '').trim(), batch: (row.batch || '').trim(),
+          angle: (row.angle || '').trim(), angle_num: (row.angle_num || '').trim(),
+          batch: (row.batch || '').trim(),
         });
       } catch (e: any) {
         errors.push(`Ligne ${index + 2}: ${e.message || 'erreur inconnue'}`);
@@ -544,7 +566,7 @@ export default function AdminScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Importer des questions CSV</Text>
         <Text style={styles.cardDesc}>
-          Format (separateur ;) : id;category;question_text;option_a;option_b;option_c;option_d;correct_option;difficulty;angle;batch
+          Format (separateur ;) : ID;Categorie;Question;Rep A;Rep B;Rep C;Rep D;Bonne rep;Difficulte;Angle;Angle Num
         </Text>
         {!fileName ? (
           <TouchableOpacity style={styles.uploadBtn} onPress={pickCSVFile}>

@@ -3059,6 +3059,7 @@ async def upload_csv_questions(data: CSVUploadRequest, db: AsyncSession = Depend
     imported = 0
     duplicates = 0
     errors = []
+    angle_num_updates = []  # Collect (q_id, angle_num) to apply after commit
 
     for i, row in enumerate(data.questions):
         try:
@@ -3073,6 +3074,7 @@ async def upload_csv_questions(data: CSVUploadRequest, db: AsyncSession = Depend
             difficulty = str(row.get("difficulty", "medium")).strip() or "medium"
             angle = str(row.get("angle", "")).strip()
             batch = str(row.get("batch", "")).strip()
+            angle_num_str = str(row.get("angle_num", "")).strip()
 
             # Validate required fields
             if not question_text:
@@ -3118,6 +3120,13 @@ async def upload_csv_questions(data: CSVUploadRequest, db: AsyncSession = Depend
             db.add(question)
             imported += 1
 
+            # Collect angle_num for post-commit update
+            if angle_num_str:
+                try:
+                    angle_num_updates.append((q_id, int(angle_num_str)))
+                except (ValueError, TypeError):
+                    pass
+
             # Commit in batches of 200
             if imported % 200 == 0:
                 await db.commit()
@@ -3126,6 +3135,18 @@ async def upload_csv_questions(data: CSVUploadRequest, db: AsyncSession = Depend
             errors.append(f"Ligne {i+1}: {str(e)}")
 
     await db.commit()
+
+    # Apply angle_num updates (column not in ORM, needs raw SQL after rows exist)
+    for q_id, anum in angle_num_updates:
+        try:
+            await db.execute(
+                text("UPDATE questions SET angle_num=:anum WHERE id=:qid"),
+                {"anum": anum, "qid": q_id}
+            )
+        except Exception:
+            pass
+    if angle_num_updates:
+        await db.commit()
 
     # Update question counts per theme
     try:
