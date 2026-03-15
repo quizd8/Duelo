@@ -3945,17 +3945,19 @@ async def admin_match_stats_by_theme(db: AsyncSession = Depends(get_db)):
     )
     rows = result.all()
 
-    # Get theme names
+    # Get theme names (only real themes from DB)
     themes_res = await db.execute(select(Theme))
     themes_map = {t.id: t.name for t in themes_res.scalars().all()}
 
     stats = []
     total_matches = 0
     for cat, count in rows:
-        theme_name = themes_map.get(cat, CATEGORY_MAP.get(cat, cat))
+        # Only include themes that exist in the themes table
+        if cat not in themes_map:
+            continue
         stats.append({
             "theme_id": cat,
-            "theme_name": theme_name,
+            "theme_name": themes_map[cat],
             "match_count": count,
         })
         total_matches += count
