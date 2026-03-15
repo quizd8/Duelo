@@ -140,6 +140,10 @@ export default function AdminScreen() {
   const [expandedSC, setExpandedSC] = useState<string | null>(null);
   const [expandedCluster, setExpandedCluster] = useState<string | null>(null);
 
+  // Theme selection for deletion
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+  const [deletingThemes, setDeletingThemes] = useState(false);
+
   // Stats state
   const [matchStats, setMatchStats] = useState<MatchStat[]>([]);
   const [totalMatches, setTotalMatches] = useState(0);
@@ -417,6 +421,67 @@ export default function AdminScreen() {
     setThemesFileName(''); setThemesCSVText(''); setThemesPreviewCount(0); setThemesUploadResult(null);
   };
 
+  // ── Theme selection & deletion ──
+
+  const toggleThemeSelection = (themeId: string) => {
+    setSelectedThemes(prev => {
+      const next = new Set(prev);
+      if (next.has(themeId)) next.delete(themeId);
+      else next.add(themeId);
+      return next;
+    });
+  };
+
+  const toggleClusterSelection = (themes: ThemeItem[]) => {
+    const ids = themes.map(t => t.id);
+    const allSelected = ids.every(id => selectedThemes.has(id));
+    setSelectedThemes(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => allSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  };
+
+  const handleDeleteThemes = () => {
+    if (selectedThemes.size === 0) return;
+    const count = selectedThemes.size;
+    Alert.alert(
+      'Supprimer des themes',
+      `Supprimer ${count} theme${count > 1 ? 's' : ''} et toutes leurs questions associees ? Cette action est irreversible.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: doDeleteThemes },
+      ],
+    );
+  };
+
+  const doDeleteThemes = async () => {
+    setDeletingThemes(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/delete-themes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password,
+          theme_ids: Array.from(selectedThemes),
+          delete_questions: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert('Supprime', `${data.deleted_themes} theme(s) et ${data.deleted_questions} question(s) supprimes.`);
+        setSelectedThemes(new Set());
+        loadThemesOverview();
+      } else {
+        Alert.alert('Erreur', data.detail || 'Erreur lors de la suppression');
+      }
+    } catch (e: any) {
+      Alert.alert('Erreur', `Erreur reseau: ${e.message || e}`);
+    } finally {
+      setDeletingThemes(false);
+    }
+  };
+
   // ── Report status update ──
 
   const updateReportStatus = async (reportId: string, newStatus: string) => {
@@ -620,7 +685,14 @@ export default function AdminScreen() {
 
       {/* Themes Overview */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Vue d'ensemble des themes</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.cardTitle}>Vue d'ensemble des themes</Text>
+          {selectedThemes.size > 0 && (
+            <TouchableOpacity onPress={() => setSelectedThemes(new Set())} data-testid="clear-selection-btn">
+              <Text style={{ color: '#888', fontSize: 12 }}>Deselectionner</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {loadingThemes ? (
           <ActivityIndicator color="#8A2BE2" style={{ marginVertical: 12 }} />
         ) : themesOverview ? (
@@ -661,11 +733,15 @@ export default function AdminScreen() {
                   <Text style={styles.scArrow}>{expandedSC === sc.id ? 'v' : '>'}</Text>
                 </TouchableOpacity>
 
-                {expandedSC === sc.id && sc.clusters.map((cl) => (
+                {expandedSC === sc.id && sc.clusters.map((cl) => {
+                  const clKey = `${sc.id}_${cl.name}`;
+                  const allClusterSelected = cl.themes.length > 0 && cl.themes.every(t => selectedThemes.has(t.id));
+                  const someClusterSelected = cl.themes.some(t => selectedThemes.has(t.id));
+                  return (
                   <View key={cl.name} style={styles.clContainer}>
                     <TouchableOpacity
                       style={styles.clHeader}
-                      onPress={() => setExpandedCluster(expandedCluster === `${sc.id}_${cl.name}` ? null : `${sc.id}_${cl.name}`)}
+                      onPress={() => setExpandedCluster(expandedCluster === clKey ? null : clKey)}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.clIcon}>{cl.icon}</Text>
@@ -673,27 +749,75 @@ export default function AdminScreen() {
                         <Text style={styles.clName}>{cl.name}</Text>
                         <Text style={styles.clMeta}>{cl.themes.length} themes | {cl.total_questions} Q</Text>
                       </View>
-                      <Text style={styles.clArrow}>{expandedCluster === `${sc.id}_${cl.name}` ? 'v' : '>'}</Text>
+                      <Text style={styles.clArrow}>{expandedCluster === clKey ? 'v' : '>'}</Text>
                     </TouchableOpacity>
 
-                    {expandedCluster === `${sc.id}_${cl.name}` && cl.themes.map((theme) => (
-                      <View key={theme.id} style={styles.themeRow}>
-                        <View style={[styles.themeIdBadge, { backgroundColor: theme.color_hex ? theme.color_hex + '30' : 'rgba(138,43,226,0.15)' }]}>
-                          <Text style={[styles.themeIdText, { color: theme.color_hex || '#8A2BE2' }]}>{theme.id}</Text>
-                        </View>
-                        <View style={styles.themeInfo}>
-                          <Text style={styles.themeName} numberOfLines={1}>{theme.name}</Text>
-                        </View>
-                        <Text style={styles.themeQCount}>{theme.question_count} Q</Text>
+                    {expandedCluster === clKey && (
+                      <View>
+                        {/* Select all cluster */}
+                        <TouchableOpacity
+                          style={styles.selectAllRow}
+                          onPress={() => toggleClusterSelection(cl.themes)}
+                          data-testid={`select-all-${cl.name}`}
+                        >
+                          <View style={[styles.checkbox, allClusterSelected && styles.checkboxChecked, !allClusterSelected && someClusterSelected && styles.checkboxPartial]}>
+                            {allClusterSelected && <Text style={styles.checkMark}>✓</Text>}
+                            {!allClusterSelected && someClusterSelected && <Text style={styles.checkMark}>-</Text>}
+                          </View>
+                          <Text style={styles.selectAllText}>
+                            {allClusterSelected ? 'Tout deselectionner' : 'Tout selectionner'} ({cl.themes.length})
+                          </Text>
+                        </TouchableOpacity>
+
+                        {cl.themes.map((theme) => (
+                        <TouchableOpacity
+                          key={theme.id}
+                          style={[styles.themeRow, selectedThemes.has(theme.id) && styles.themeRowSelected]}
+                          onPress={() => toggleThemeSelection(theme.id)}
+                          activeOpacity={0.7}
+                          data-testid={`theme-row-${theme.id}`}
+                        >
+                          <View style={[styles.checkbox, selectedThemes.has(theme.id) && styles.checkboxChecked]}>
+                            {selectedThemes.has(theme.id) && <Text style={styles.checkMark}>✓</Text>}
+                          </View>
+                          <View style={[styles.themeIdBadge, { backgroundColor: theme.color_hex ? theme.color_hex + '30' : 'rgba(138,43,226,0.15)' }]}>
+                            <Text style={[styles.themeIdText, { color: theme.color_hex || '#8A2BE2' }]}>{theme.id}</Text>
+                          </View>
+                          <View style={styles.themeInfo}>
+                            <Text style={styles.themeName} numberOfLines={1}>{theme.name}</Text>
+                          </View>
+                          <Text style={styles.themeQCount}>{theme.question_count} Q</Text>
+                        </TouchableOpacity>
+                        ))}
                       </View>
-                    ))}
+                    )}
                   </View>
-                ))}
+                  );
+                })}
               </View>
             ))}
           </View>
         ) : <Text style={styles.noDataText}>Aucun theme en base</Text>}
       </View>
+
+      {/* Floating delete bar */}
+      {selectedThemes.size > 0 && (
+        <View style={styles.deleteBar} data-testid="delete-themes-bar">
+          <Text style={styles.deleteBarText}>{selectedThemes.size} theme{selectedThemes.size > 1 ? 's' : ''} selectionne{selectedThemes.size > 1 ? 's' : ''}</Text>
+          <TouchableOpacity
+            style={[styles.deleteBarBtn, deletingThemes && { opacity: 0.5 }]}
+            onPress={handleDeleteThemes}
+            disabled={deletingThemes}
+            data-testid="delete-themes-btn"
+          >
+            {deletingThemes ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <Text style={styles.deleteBarBtnText}>Supprimer</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 
@@ -1082,8 +1206,11 @@ const styles = StyleSheet.create({
   // Theme row
   themeRow: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
-    paddingHorizontal: 16, marginLeft: 28,
+    paddingHorizontal: 12, marginLeft: 28,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.03)',
+  },
+  themeRowSelected: {
+    backgroundColor: 'rgba(255,59,48,0.08)',
   },
   themeIdBadge: {
     borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginRight: 10,
@@ -1155,4 +1282,38 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: '#666', fontSize: 14, fontWeight: '500' },
+
+  // Checkbox
+  checkbox: {
+    width: 20, height: 20, borderRadius: 4, borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)', marginRight: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#FF3B30', borderColor: '#FF3B30',
+  },
+  checkboxPartial: {
+    borderColor: '#FF3B30',
+  },
+  checkMark: { color: '#FFF', fontSize: 12, fontWeight: '900', lineHeight: 14 },
+
+  // Select all row
+  selectAllRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
+    paddingHorizontal: 12, marginLeft: 28,
+    backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 6, marginBottom: 4,
+  },
+  selectAllText: { color: '#999', fontSize: 11, fontWeight: '600' },
+
+  // Delete bar
+  deleteBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,59,48,0.12)', borderRadius: 12, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,59,48,0.3)',
+  },
+  deleteBarText: { color: '#FF8A80', fontSize: 14, fontWeight: '600' },
+  deleteBarBtn: {
+    backgroundColor: '#FF3B30', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10,
+  },
+  deleteBarBtnText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
 });

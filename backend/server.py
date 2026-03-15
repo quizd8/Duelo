@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, func, text, or_, and_
+from sqlalchemy import select, func, text, or_, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import User, Question, Match, CategoryFollow, WallPost, PostLike, PostComment, PlayerFollow, ChatMessage, Notification, NotificationSettings, Theme, UserThemeXP, QuestionReport, generate_uuid
@@ -4060,6 +4060,44 @@ async def admin_update_report_status(report_id: str, request: Request, db: Async
     report.status = new_status
     await db.commit()
     return {"success": True, "status": new_status}
+
+
+
+# ── Delete Themes ──
+
+class DeleteThemesRequest(BaseModel):
+    password: str
+    theme_ids: list[str]
+    delete_questions: bool = True
+
+@api_router.post("/admin/delete-themes")
+async def delete_themes(data: DeleteThemesRequest, db: AsyncSession = Depends(get_db)):
+    """Delete one or more themes and optionally their associated questions."""
+    if data.password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Mot de passe administrateur incorrect")
+
+    if not data.theme_ids:
+        raise HTTPException(status_code=400, detail="Aucun theme selectionne")
+
+    deleted_questions = 0
+    if data.delete_questions:
+        result = await db.execute(
+            delete(Question).where(Question.category.in_(data.theme_ids))
+        )
+        deleted_questions = result.rowcount
+
+    result = await db.execute(
+        delete(Theme).where(Theme.id.in_(data.theme_ids))
+    )
+    deleted_themes = result.rowcount
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "deleted_themes": deleted_themes,
+        "deleted_questions": deleted_questions,
+    }
 
 
 # ── App Setup ──
