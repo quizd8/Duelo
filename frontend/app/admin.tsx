@@ -467,14 +467,10 @@ export default function AdminScreen() {
   const handleDeleteThemes = () => {
     if (selectedThemes.size === 0) return;
     const count = selectedThemes.size;
-    Alert.alert(
-      'Supprimer des themes',
-      `Supprimer ${count} theme${count > 1 ? 's' : ''} et toutes leurs questions associees ? Cette action est irreversible.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: doDeleteThemes },
-      ],
-    );
+    const msg = `Supprimer ${count} theme${count > 1 ? 's' : ''} et toutes leurs questions associees ? Cette action est irreversible.`;
+    if (typeof window !== 'undefined' && window.confirm(msg)) {
+      doDeleteThemes();
+    }
   };
 
   const doDeleteThemes = async () => {
