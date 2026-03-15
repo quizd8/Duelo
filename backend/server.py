@@ -454,6 +454,15 @@ async def get_categories(db: AsyncSession = Depends(get_db)):
     return categories
 
 
+def shuffle_question_options(options: list, correct_option: int) -> tuple:
+    """Shuffle 4 options uniformly (25% each position) and return (new_options, new_correct_index)."""
+    indices = list(range(len(options)))
+    random.shuffle(indices)
+    new_options = [options[i] for i in indices]
+    new_correct = indices.index(correct_option)
+    return new_options, new_correct
+
+
 # ── Game Routes ──
 
 @api_router.get("/game/questions")
@@ -469,12 +478,14 @@ async def get_game_questions(category: str, db: AsyncSession = Depends(get_db)):
         )
         questions = result.scalars().all()
 
-    return [
-        QuestionOut(
+    result_list = []
+    for q in questions:
+        shuffled_opts, new_correct = shuffle_question_options(q.options, q.correct_option)
+        result_list.append(QuestionOut(
             id=q.id, category=q.category, question_text=q.question_text,
-            options=q.options, correct_option=q.correct_option, difficulty=q.difficulty
-        ) for q in questions
-    ]
+            options=shuffled_opts, correct_option=new_correct, difficulty=q.difficulty
+        ))
+    return result_list
 
 
 STREAK_BONUSES = {3: 10, 5: 25, 10: 50}  # streak_count: bonus_xp
@@ -3432,17 +3443,18 @@ async def get_game_questions_v2(theme: str, db: AsyncSession = Depends(get_db)):
     # Shuffle the final selection
     random.shuffle(selected)
 
-    return [
-        {
+    result = []
+    for q in selected:
+        shuffled_opts, new_correct = shuffle_question_options(q.options, q.correct_option)
+        result.append({
             "id": q.id,
             "category": q.category,
             "question_text": q.question_text,
-            "options": q.options,
-            "correct_option": q.correct_option,
+            "options": shuffled_opts,
+            "correct_option": new_correct,
             "difficulty": q.difficulty,
-        }
-        for q in selected
-    ]
+        })
+    return result
 
 
 # ── Theme Matchmaking ──

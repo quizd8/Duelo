@@ -57,3 +57,5 @@ Application mobile de quiz compétitif en temps réel construite avec Expo (Reac
 - **09/03/2026** : Renommage `home.tsx` → `play.tsx` pour clarifier le rôle du fichier (page "Jouer")
 - Sessions précédentes : Icônes personnalisées, fix superposition pages, fix boucle profil, fix couleurs icônes inactives
 - **14/03/2026** : Ajout fonctionnalité "Signaler une erreur dans une question" après quiz (API backend + modal frontend sur écran résultats)
+- **Session précédente** : Refonte admin (fond noir, onglets Questions/Thèmes/Stats/Signalements), upload CSV thèmes, vue hiérarchique, stats filtrées, gestion signalements
+- **Session actuelle** : Mélange aléatoire des options de réponse (25% par position) sur les endpoints `/api/game/questions` et `/api/game/questions-v2` via `shuffle_question_options()`
