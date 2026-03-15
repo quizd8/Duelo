@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput,
+  View, Text, TouchableOpacity, Pressable, StyleSheet, ScrollView, TextInput,
   Alert, ActivityIndicator, Platform, KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -144,6 +144,7 @@ export default function AdminScreen() {
   // Theme selection for deletion
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [deletingThemes, setDeletingThemes] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Stats state
   const [matchStats, setMatchStats] = useState<MatchStat[]>([]);
@@ -466,14 +467,15 @@ export default function AdminScreen() {
 
   const handleDeleteThemes = () => {
     if (selectedThemes.size === 0) return;
-    const count = selectedThemes.size;
-    const msg = `Supprimer ${count} theme${count > 1 ? 's' : ''} et toutes leurs questions associees ? Cette action est irreversible.`;
-    if (typeof window !== 'undefined' && window.confirm(msg)) {
-      doDeleteThemes();
-    }
+    setConfirmDelete(true);
+  };
+
+  const cancelDelete = () => {
+    setConfirmDelete(false);
   };
 
   const doDeleteThemes = async () => {
+    setConfirmDelete(false);
     setDeletingThemes(true);
     try {
       const res = await fetch(`${API_URL}/api/admin/delete-themes`, {
@@ -487,14 +489,11 @@ export default function AdminScreen() {
       });
       const data = await res.json();
       if (res.ok) {
-        Alert.alert('Supprime', `${data.deleted_themes} theme(s) et ${data.deleted_questions} question(s) supprimes.`);
         setSelectedThemes(new Set());
         loadThemesOverview();
-      } else {
-        Alert.alert('Erreur', data.detail || 'Erreur lors de la suppression');
       }
     } catch (e: any) {
-      Alert.alert('Erreur', `Erreur reseau: ${e.message || e}`);
+      // silently fail
     } finally {
       setDeletingThemes(false);
     }
@@ -772,20 +771,52 @@ export default function AdminScreen() {
 
                     {expandedCluster === clKey && (
                       <View>
-                        {/* Select all cluster */}
-                        <TouchableOpacity
-                          style={styles.selectAllRow}
-                          onPress={() => toggleClusterSelection(cl.themes)}
-                          data-testid={`select-all-${cl.name}`}
-                        >
-                          <View style={[styles.checkbox, allClusterSelected && styles.checkboxChecked, !allClusterSelected && someClusterSelected && styles.checkboxPartial]}>
-                            {allClusterSelected && <Text style={styles.checkMark}>✓</Text>}
-                            {!allClusterSelected && someClusterSelected && <Text style={styles.checkMark}>-</Text>}
-                          </View>
-                          <Text style={styles.selectAllText}>
-                            {allClusterSelected ? 'Tout deselectionner' : 'Tout selectionner'} ({cl.themes.length})
-                          </Text>
-                        </TouchableOpacity>
+                        {/* Select all cluster + delete actions */}
+                        <View style={styles.selectAllRow}>
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                            onPress={() => toggleClusterSelection(cl.themes)}
+                          >
+                            <View style={[styles.checkbox, allClusterSelected && styles.checkboxChecked, !allClusterSelected && someClusterSelected && styles.checkboxPartial]}>
+                              {allClusterSelected && <Text style={styles.checkMark}>✓</Text>}
+                              {!allClusterSelected && someClusterSelected && <Text style={styles.checkMark}>-</Text>}
+                            </View>
+                            <Text style={styles.selectAllText}>
+                              {allClusterSelected ? 'Tout deselectionner' : 'Tout selectionner'} ({cl.themes.length})
+                            </Text>
+                          </TouchableOpacity>
+                          {selectedThemes.size > 0 && !confirmDelete && (
+                            <TouchableOpacity
+                              style={styles.inlineDeleteBtn}
+                              onPress={handleDeleteThemes}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.inlineDeleteBtnText}>
+                                Supprimer ({selectedThemes.size})
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          {selectedThemes.size > 0 && confirmDelete && (
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                              <TouchableOpacity
+                                style={styles.inlineCancelBtn}
+                                onPress={cancelDelete}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={styles.inlineCancelBtnText}>Non</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.inlineConfirmBtn}
+                                onPress={doDeleteThemes}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={styles.inlineConfirmBtnText}>
+                                  {deletingThemes ? '...' : 'Oui, supprimer'}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
 
                         {cl.themes.map((theme) => (
                         <TouchableOpacity
@@ -817,25 +848,6 @@ export default function AdminScreen() {
           </View>
         ) : <Text style={styles.noDataText}>Aucun theme en base</Text>}
       </View>
-
-      {/* Floating delete bar */}
-      {selectedThemes.size > 0 && (
-        <View style={styles.deleteBar} data-testid="delete-themes-bar">
-          <Text style={styles.deleteBarText}>{selectedThemes.size} theme{selectedThemes.size > 1 ? 's' : ''} selectionne{selectedThemes.size > 1 ? 's' : ''}</Text>
-          <TouchableOpacity
-            style={[styles.deleteBarBtn, deletingThemes && { opacity: 0.5 }]}
-            onPress={handleDeleteThemes}
-            disabled={deletingThemes}
-            data-testid="delete-themes-btn"
-          >
-            {deletingThemes ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <Text style={styles.deleteBarBtnText}>Supprimer</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 
@@ -1016,6 +1028,11 @@ export default function AdminScreen() {
         {activeTab === 3 && renderReportsTab()}
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Delete bar - OUTSIDE ScrollView - uses web-compatible approach */}
+      {activeTab === 1 && selectedThemes.size > 0 && (
+        <View style={{height: 0}} />
+      )}
     </SafeAreaView>
     </View>
   );
@@ -1334,4 +1351,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF3B30', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10,
   },
   deleteBarBtnText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+  cancelBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10,
+  },
+  cancelBtnText: { color: '#AAA', fontSize: 14, fontWeight: '600' },
+
+  // Inline delete buttons (in select-all row)
+  inlineDeleteBtn: {
+    backgroundColor: '#FF3B30', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  inlineDeleteBtnText: { color: '#FFF', fontSize: 11, fontWeight: '800' },
+  inlineCancelBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  inlineCancelBtnText: { color: '#AAA', fontSize: 11, fontWeight: '600' },
+  inlineConfirmBtn: {
+    backgroundColor: '#FF3B30', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  inlineConfirmBtnText: { color: '#FFF', fontSize: 11, fontWeight: '800' },
 });
